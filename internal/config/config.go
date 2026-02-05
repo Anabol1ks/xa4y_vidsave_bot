@@ -13,6 +13,7 @@ type Config struct {
 	AllowedHosts       map[string]struct{}
 	InsecureSkipVerify bool
 	MaxDownloadBytes   int64
+	Proxy              string
 }
 
 func getEnv(key string, log *zap.Logger) string {
@@ -29,6 +30,7 @@ func Load(log *zap.Logger) *Config {
 		AllowedHosts:       parseAllowedHosts(getEnv("ALLOWED_HOSTS", log)),
 		InsecureSkipVerify: parseBool(getEnv("INSECURE_SKIP_VERIFY", log)),
 		MaxDownloadBytes:   int64(parseInt(getEnv("MAX_DOWNLOAD_MB", log), 200)) * 1024 * 1024,
+		Proxy:              strings.TrimSpace(os.Getenv("PROXY")),
 	}
 }
 

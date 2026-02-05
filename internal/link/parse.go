@@ -2,7 +2,6 @@ package link
 
 import (
 	"errors"
-	"log"
 	"net/url"
 	"regexp"
 	"strings"
@@ -17,8 +16,8 @@ var (
 type Type string
 
 const (
-	TypeA Type = "A"
-	TypeB Type = "B"
+	TypeTikTok    Type = "tiktok"
+	TypeInstagram Type = "instagram"
 )
 
 type Parsed struct {
@@ -34,8 +33,8 @@ type Parsed struct {
 }
 
 var (
-	reA = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
-	reB = regexp.MustCompile(`^/reel/([A-Za-z0-9_-]+)/?$`)
+	reTikTok    = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
+	reInstagram = regexp.MustCompile(`^/(?:reels?|p)/([A-Za-z0-9_-]+)/?$`)
 )
 
 func Parse(raw string, allowedHosts map[string]struct{}) (Parsed, error) {
@@ -66,18 +65,17 @@ func Parse(raw string, allowedHosts map[string]struct{}) (Parsed, error) {
 		return Parsed{}, ErrNotAllowedHost
 	}
 
-	if m := reA.FindStringSubmatch(p.Path); len(m) == 3 {
-		p.LinkType = TypeA
+	if m := reTikTok.FindStringSubmatch(p.Path); len(m) == 3 {
+		p.LinkType = TypeTikTok
 		p.VideoID = m[2]
 		return p, nil
 	}
 
-	if m := reB.FindStringSubmatch(p.Path); len(m) == 2 {
-		p.LinkType = TypeB
+	if m := reInstagram.FindStringSubmatch(p.Path); len(m) == 2 {
+		p.LinkType = TypeInstagram
 		p.VideoID = m[1]
 		return p, nil
 	}
-	log.Println(p)
 	return Parsed{}, ErrUnknownFormat
 }
 

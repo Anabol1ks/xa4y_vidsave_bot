@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"xa4yy_vidsave/internal/config"
+	"xa4yy_vidsave/internal/download"
 	"xa4yy_vidsave/internal/link"
 	"xa4yy_vidsave/internal/logger"
 
@@ -48,12 +50,12 @@ func main() {
 			log.Info("shutting down gracefully")
 			return
 		case upd := <-updates:
-			handleUpdate(log, bot, upd, cfg)
+			handleUpdate(ctx, log, bot, upd, cfg)
 		}
 	}
 }
 
-func handleUpdate(log *zap.Logger, bot *tgbotapi.BotAPI, upd tgbotapi.Update, cfg *config.Config) {
+func handleUpdate(ctx context.Context, log *zap.Logger, bot *tgbotapi.BotAPI, upd tgbotapi.Update, cfg *config.Config) {
 	if upd.Message == nil {
 		return
 	}
@@ -104,8 +106,53 @@ func handleUpdate(log *zap.Logger, bot *tgbotapi.BotAPI, upd tgbotapi.Update, cf
 		zap.String("path", parsed.Path),
 	)
 
-	// пока просто подтверждаем
-	_, _ = bot.Send(tgbotapi.NewMessage(chatID,
-		"✅ Ссылка принята\nТип: "+string(parsed.LinkType)+"\nID: "+parsed.VideoID,
-	))
+	switch parsed.LinkType {
+	case link.TypeInstagram, link.TypeTikTok:
+		handleDownload(ctx, log, bot, chatID, parsed, cfg)
+	default:
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID,
+			"✅ Ссылка принята\nТип: "+string(parsed.LinkType)+"\nID: "+parsed.VideoID+
+				"\n\n⏳ Скачивание этого типа пока не реализовано.",
+		))
+	}
+}
+
+func handleDownload(ctx context.Context, log *zap.Logger, bot *tgbotapi.BotAPI, chatID int64, parsed link.Parsed, cfg *config.Config) {
+	_, _ = bot.Send(tgbotapi.NewMessage(chatID, "⏳ Скачиваю видео..."))
+
+	result, err := download.DownloadVideo(ctx, parsed.Raw, cfg.Proxy, log)
+	if err != nil {
+		log.Error("video download failed", zap.Error(err), zap.String("url", parsed.Raw))
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "❌ Не удалось скачать видео. Попробуйте позже."))
+		return
+	}
+	defer os.Remove(result.FilePath)
+	// Удаляем родительскую tmp-директорию
+	defer os.RemoveAll(filepath.Dir(result.FilePath))
+
+	fileData, err := os.ReadFile(result.FilePath)
+	if err != nil {
+		log.Error("failed to read downloaded file", zap.Error(err))
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "❌ Ошибка чтения файла."))
+		return
+	}
+
+	if int64(len(fileData)) > cfg.MaxDownloadBytes {
+		log.Warn("file too large", zap.Int("size", len(fileData)), zap.Int64("max", cfg.MaxDownloadBytes))
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "❌ Видео слишком большое для отправки."))
+		return
+	}
+
+	fileBytes := tgbotapi.FileBytes{Name: parsed.VideoID + ".mp4", Bytes: fileData}
+	video := tgbotapi.NewVideo(chatID, fileBytes)
+	video.Caption = "🎬 Видео"
+	video.SupportsStreaming = true
+
+	if _, err := bot.Send(video); err != nil {
+		log.Error("failed to send video to telegram", zap.Error(err))
+		_, _ = bot.Send(tgbotapi.NewMessage(chatID, "❌ Не удалось отправить видео в Telegram."))
+		return
+	}
+
+	log.Info("video sent successfully", zap.String("video_id", parsed.VideoID))
 }
