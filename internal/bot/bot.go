@@ -5,6 +5,7 @@ import (
 	"strings"
 	"xa4yy_vidsave/internal/config"
 	"xa4yy_vidsave/internal/link"
+	"xa4yy_vidsave/internal/storage"
 
 	"go.uber.org/zap"
 
@@ -17,10 +18,11 @@ type Bot struct {
 	cfg    *config.Config
 	log    *zap.Logger
 	sender *Sender
+	store  *storage.Storage
 }
 
 // New создаёт экземпляр бота.
-func New(cfg *config.Config, log *zap.Logger) (*Bot, error) {
+func New(cfg *config.Config, log *zap.Logger, store *storage.Storage) (*Bot, error) {
 	api, err := tgbotapi.NewBotAPI(cfg.BotToken)
 	if err != nil {
 		return nil, err
@@ -32,6 +34,7 @@ func New(cfg *config.Config, log *zap.Logger) (*Bot, error) {
 		cfg:    cfg,
 		log:    log,
 		sender: NewSender(api, log),
+		store:  store,
 	}, nil
 }
 

@@ -2,11 +2,15 @@ package bot
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"xa4yy_vidsave/internal/download"
 	"xa4yy_vidsave/internal/link"
+	"xa4yy_vidsave/internal/storage"
 
 	"go.uber.org/zap"
 
@@ -56,6 +60,30 @@ func (b *Bot) handleParseError(chatID int64, text string, err error) {
 const telegramMaxFileSize = 50 * 1024 * 1024
 
 func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Parsed) {
+	sourceKey := storage.SourceKeyFromParsed(string(parsed.LinkType), parsed.VideoID)
+
+	// 1. Проверяем кэш по source_key
+	cached, err := b.store.Lookup(sourceKey)
+	if err == nil {
+		// Кэш-хит — отправляем по file_id мгновенно
+		b.log.Info("cache hit",
+			zap.String("source_key", sourceKey),
+			zap.Int64("hit_count", cached.HitCount+1),
+		)
+		video := tgbotapi.NewVideo(chatID, tgbotapi.FileID(cached.TgFileID))
+		video.Caption = "🎬 Видео"
+		video.SupportsStreaming = true
+		if err := b.sender.Send(video); err != nil {
+			b.log.Error("failed to send cached video", zap.Error(err))
+			b.sender.Text(chatID, "❌ Не удалось отправить видео.")
+		}
+		return
+	}
+	if !errors.Is(err, storage.ErrNotFound) {
+		b.log.Error("cache lookup error", zap.Error(err))
+	}
+
+	// 2. Кэш-мисс — скачиваем
 	b.sender.Text(chatID, "⏳ Скачиваю видео...")
 
 	result, err := download.DownloadVideo(ctx, parsed.Raw, b.cfg.Proxy, b.log)
@@ -64,10 +92,9 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 		b.sender.Text(chatID, "❌ Не удалось скачать видео. Попробуйте позже.")
 		return
 	}
-	// Гарантируем очистку tmp в любом случае
 	defer cleanup(result.FilePath, b.log)
 
-	// Проверяем размер файла БЕЗ чтения в память
+	// 3. Проверяем размер
 	info, err := os.Stat(result.FilePath)
 	if err != nil {
 		b.log.Error("failed to stat downloaded file", zap.Error(err))
@@ -77,25 +104,15 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 
 	fileSize := info.Size()
 
-	// Лимит из конфига (MaxDownloadBytes)
 	if fileSize > b.cfg.MaxDownloadBytes {
-		b.log.Warn("file exceeds config limit",
-			zap.Int64("size", fileSize),
-			zap.Int64("max", b.cfg.MaxDownloadBytes),
-		)
 		b.sender.Text(chatID, fmt.Sprintf(
 			"❌ Видео слишком большое (%d МБ). Лимит: %d МБ.",
-			fileSize/(1024*1024),
-			b.cfg.MaxDownloadBytes/(1024*1024),
+			fileSize/(1024*1024), b.cfg.MaxDownloadBytes/(1024*1024),
 		))
 		return
 	}
 
-	// Лимит Telegram Bot API (50 MB)
 	if fileSize > telegramMaxFileSize {
-		b.log.Warn("file exceeds Telegram limit",
-			zap.Int64("size", fileSize),
-		)
 		b.sender.Text(chatID, fmt.Sprintf(
 			"❌ Видео слишком большое для Telegram (%d МБ). Лимит: 50 МБ.",
 			fileSize/(1024*1024),
@@ -103,7 +120,7 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 		return
 	}
 
-	// Читаем файл
+	// 4. Читаем файл и считаем SHA256
 	fileData, err := os.ReadFile(result.FilePath)
 	if err != nil {
 		b.log.Error("failed to read downloaded file", zap.Error(err))
@@ -111,15 +128,62 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 		return
 	}
 
+	hash := sha256.Sum256(fileData)
+	hashHex := hex.EncodeToString(hash[:])
+
+	// 5. Проверяем дедупликацию по SHA256 — может тот же файл уже был по другой ссылке
+	if dedup, err := b.store.LookupBySHA256(hashHex); err == nil {
+		b.log.Info("dedup hit by sha256",
+			zap.String("sha256", hashHex),
+			zap.String("existing_key", dedup.SourceKey),
+		)
+		video := tgbotapi.NewVideo(chatID, tgbotapi.FileID(dedup.TgFileID))
+		video.Caption = "🎬 Видео"
+		video.SupportsStreaming = true
+		if err := b.sender.Send(video); err == nil {
+			// Сохраняем новый source_key с тем же file_id
+			_ = b.store.Upsert(&storage.MediaCache{
+				SourceKey:      sourceKey,
+				SHA256:         hashHex,
+				TgFileID:       dedup.TgFileID,
+				TgFileUniqueID: dedup.TgFileUniqueID,
+				SizeBytes:      fileSize,
+			})
+			return
+		}
+		b.log.Warn("dedup send failed, uploading fresh", zap.Error(err))
+	}
+
+	// 6. Отправляем файл в Telegram
 	fileBytes := tgbotapi.FileBytes{Name: parsed.VideoID + ".mp4", Bytes: fileData}
 	video := tgbotapi.NewVideo(chatID, fileBytes)
 	video.Caption = "🎬 Видео"
 	video.SupportsStreaming = true
 
-	if err := b.sender.Send(video); err != nil {
-		b.log.Error("failed to send video to telegram", zap.Error(err))
+	resp, sendErr := b.sender.SendWithResponse(video)
+	if sendErr != nil {
+		b.log.Error("failed to send video to telegram", zap.Error(sendErr))
 		b.sender.Text(chatID, "❌ Не удалось отправить видео в Telegram.")
 		return
+	}
+
+	// 7. Извлекаем file_id из ответа Telegram и сохраняем в кэш
+	if resp.Video != nil {
+		entry := &storage.MediaCache{
+			SourceKey:      sourceKey,
+			SHA256:         hashHex,
+			TgFileID:       resp.Video.FileID,
+			TgFileUniqueID: resp.Video.FileUniqueID,
+			SizeBytes:      fileSize,
+		}
+		if err := b.store.Upsert(entry); err != nil {
+			b.log.Error("failed to save cache entry", zap.Error(err))
+		} else {
+			b.log.Info("cached video",
+				zap.String("source_key", sourceKey),
+				zap.String("file_id", resp.Video.FileID),
+			)
+		}
 	}
 
 	b.log.Info("video sent successfully",

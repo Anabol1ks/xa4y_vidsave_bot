@@ -24,10 +24,16 @@ const maxRetries = 3
 
 // Send отправляет Chattable (видео, фото, текст и т.д.) с retry при 429.
 func (s *Sender) Send(c tgbotapi.Chattable) error {
+	_, err := s.SendWithResponse(c)
+	return err
+}
+
+// SendWithResponse отправляет Chattable и возвращает ответ Telegram (Message).
+func (s *Sender) SendWithResponse(c tgbotapi.Chattable) (*tgbotapi.Message, error) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		_, err := s.api.Send(c)
+		msg, err := s.api.Send(c)
 		if err == nil {
-			return nil
+			return &msg, nil
 		}
 
 		// Проверяем 429 Too Many Requests
@@ -42,10 +48,10 @@ func (s *Sender) Send(c tgbotapi.Chattable) error {
 		}
 
 		// Другая ошибка — не ретраим
-		return err
+		return nil, err
 	}
 
-	return nil
+	return nil, nil
 }
 
 // Text — удобная обёртка для отправки текстового сообщения.
