@@ -25,8 +25,8 @@ type VideoResult struct {
 
 // DownloadVideo скачивает видео по оригинальному URL через yt-dlp.
 // Работает с Instagram Reels, TikTok и другими поддерживаемыми сайтами.
-// Возвращает путь к временному файлу .mp4 (без водяного знака).
-// proxy — строка вида "socks5://host:port" или "http://host:port" (может быть пустой).
+// Возвращает путь к временному файлу (без водяного знака).
+// proxy — строка вида "socks5h://host:port" или "http://host:port" (может быть пустой).
 func DownloadVideo(ctx context.Context, rawURL string, proxy string, log *zap.Logger) (*VideoResult, error) {
 	// Создаём временную директорию для скачивания
 	tmpDir, err := os.MkdirTemp("", "vidsave_*")
@@ -39,8 +39,15 @@ func DownloadVideo(ctx context.Context, rawURL string, proxy string, log *zap.Lo
 	args := []string{
 		"--no-warnings",
 		"--no-playlist",
+		"--no-overwrites",
 		"-f", "best",
 		"-o", outTemplate,
+		// Лимит размера файла — 50 MB (Telegram Bot API limit)
+		"--max-filesize", "50M",
+		// Таймаут на сокет-операции (не зависать вечно)
+		"--socket-timeout", "30",
+		// Количество ретраев при ошибках сети
+		"--retries", "3",
 		// Выводим итоговый путь к файлу после всех перемещений/мержей
 		"--print", "after_move:filepath",
 	}
