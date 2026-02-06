@@ -8,6 +8,7 @@ import (
 	"xa4yy_vidsave/internal/bot"
 	"xa4yy_vidsave/internal/config"
 	"xa4yy_vidsave/internal/logger"
+	"xa4yy_vidsave/internal/storage"
 
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
@@ -24,7 +25,13 @@ func main() {
 	log := logger.L()
 	cfg := config.Load(log)
 
-	b, err := bot.New(cfg, log)
+	store, err := storage.New(cfg.DatabaseURL, log)
+	if err != nil {
+		log.Fatal("failed to connect to database", zap.Error(err))
+	}
+	defer store.Close()
+
+	b, err := bot.New(cfg, log, store)
 	if err != nil {
 		log.Fatal("failed to create bot", zap.Error(err))
 	}
