@@ -11,7 +11,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vidsave -d vidsave"]
+      test: ["CMD-SHELL", "pg_isready -U xa4y -d vidsave"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -22,6 +22,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     environment:
