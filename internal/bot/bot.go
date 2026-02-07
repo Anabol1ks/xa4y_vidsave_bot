@@ -59,6 +59,12 @@ func (b *Bot) Run(ctx context.Context) {
 
 // handleUpdate обрабатывает одно обновление (сообщение пользователя).
 func (b *Bot) handleUpdate(ctx context.Context, upd tgbotapi.Update) {
+	// Inline-запросы (кнопка «Поделиться»)
+	if upd.InlineQuery != nil {
+		b.handleInlineQuery(upd.InlineQuery)
+		return
+	}
+
 	if upd.Message == nil {
 		return
 	}
@@ -70,7 +76,7 @@ func (b *Bot) handleUpdate(ctx context.Context, upd tgbotapi.Update) {
 	defer func() {
 		if r := recover(); r != nil {
 			b.log.Error("panic in handler", zap.Any("recover", r), zap.Int64("chat_id", chatID))
-			b.sender.Text(chatID, "❌ Внутренняя ошибка. Попробуйте позже.")
+			b.sender.Text(chatID, "что-то сломалось 😵 попробуй позже")
 		}
 	}()
 
@@ -82,7 +88,7 @@ func (b *Bot) handleUpdate(ctx context.Context, upd tgbotapi.Update) {
 
 	text := strings.TrimSpace(msg.Text)
 	if text == "" {
-		b.sender.Text(chatID, "Пришли ссылку текстом.")
+		b.sender.Text(chatID, "кинь ссылку текстом 👇")
 		return
 	}
 
@@ -102,9 +108,6 @@ func (b *Bot) handleUpdate(ctx context.Context, upd tgbotapi.Update) {
 	case link.TypeInstagram, link.TypeTikTok:
 		b.handleDownload(ctx, chatID, parsed)
 	default:
-		b.sender.Text(chatID,
-			"✅ Ссылка принята\nТип: "+string(parsed.LinkType)+"\nID: "+parsed.VideoID+
-				"\n\n⏳ Скачивание этого типа пока не реализовано.",
-		)
+		b.sender.Text(chatID, "этот тип пока не поддерживаю 😕")
 	}
 }
