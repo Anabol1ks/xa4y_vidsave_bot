@@ -64,6 +64,41 @@ func (s *Sender) Text(chatID int64, text string) {
 	}
 }
 
+// TextWithResponse отправляет текст и возвращает Message (для последующего редактирования/удаления).
+func (s *Sender) TextWithResponse(chatID int64, text string) *tgbotapi.Message {
+	msg, err := s.SendWithResponse(tgbotapi.NewMessage(chatID, text))
+	if err != nil {
+		s.log.Warn("failed to send text message",
+			zap.Error(err),
+			zap.Int64("chat_id", chatID),
+		)
+		return nil
+	}
+	return msg
+}
+
+// EditText редактирует текстовое сообщение.
+func (s *Sender) EditText(chatID int64, messageID int, text string) {
+	edit := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	if _, err := s.api.Send(edit); err != nil {
+		s.log.Warn("failed to edit message",
+			zap.Error(err),
+			zap.Int("message_id", messageID),
+		)
+	}
+}
+
+// Delete удаляет сообщение.
+func (s *Sender) Delete(chatID int64, messageID int) {
+	del := tgbotapi.NewDeleteMessage(chatID, messageID)
+	if _, err := s.api.Request(del); err != nil {
+		s.log.Warn("failed to delete message",
+			zap.Error(err),
+			zap.Int("message_id", messageID),
+		)
+	}
+}
+
 // isRateLimited проверяет, является ли ошибка 429 (Too Many Requests).
 func isRateLimited(err error) bool {
 	if err == nil {

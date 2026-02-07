@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 	"xa4yy_vidsave/internal/download"
 	"xa4yy_vidsave/internal/link"
 	"xa4yy_vidsave/internal/storage"
@@ -17,23 +19,37 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
+const (
+	channelLink  = "https://t.me/XA4yy"
+	videoCaption = "🎬 @XA4yy"
+	errorContact = "\n\nесли повторяется — напиши @gr1sha_44"
+)
+
 // --- Команды ---
 
 func (b *Bot) handleCommand(chatID int64, msg *tgbotapi.Message) {
 	switch msg.Command() {
 	case "start":
-		b.sender.Text(chatID,
-			"👋 Привет! Отправь мне ссылку на видео из TikTok или Instagram, и я скачаю его без водяного знака.",
+		text := "Барев! 👋\n\n" +
+			"скинь ссылку на видео из TikTok или Instagram —\n" +
+			"верну без водяного знака 🔥\n\n" +
+			"канал → @XA4yy"
+		reply := tgbotapi.NewMessage(chatID, text)
+		reply.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonURL("📢 Канал", channelLink),
+			),
 		)
+		b.sender.Send(reply)
 	case "help":
 		b.sender.Text(chatID,
-			"📖 Поддерживаемые платформы:\n"+
-				"• TikTok — ссылка вида tiktok.com/@user/video/123\n"+
-				"• Instagram — ссылка вида instagram.com/reel/ABC\n\n"+
-				"Просто отправь ссылку, и я пришлю видео.",
+			"📌 что умею:\n\n"+
+				"• TikTok — ссылка на видео\n"+
+				"• Instagram — ссылка на reel\n\n"+
+				"просто кидай ссылку 👇",
 		)
 	default:
-		b.sender.Text(chatID, "Неизвестная команда. Попробуй /help")
+		b.sender.Text(chatID, "хз такую команду 🤷‍♂️ жми /help")
 	}
 }
 
@@ -44,13 +60,13 @@ func (b *Bot) handleParseError(chatID int64, text string, err error) {
 
 	switch err {
 	case link.ErrNotURL:
-		b.sender.Text(chatID, "Это не похоже на корректный URL.")
+		b.sender.Text(chatID, "это не похоже на ссылку 🧐")
 	case link.ErrNotAllowedHost:
-		b.sender.Text(chatID, "❌ Домен не поддерживается. Поддерживаются: TikTok, Instagram.")
+		b.sender.Text(chatID, "такой домен не поддерживаю 😕\n\nпока умею только TikTok и Instagram"+errorContact)
 	case link.ErrUnknownFormat:
-		b.sender.Text(chatID, "❌ Формат ссылки не распознан. Пришли прямую ссылку на видео.")
+		b.sender.Text(chatID, "не могу разобрать ссылку 🤔\nкинь прямую ссылку на видео"+errorContact)
 	default:
-		b.sender.Text(chatID, "❌ Ошибка обработки ссылки: "+err.Error())
+		b.sender.Text(chatID, "что-то пошло не так: "+err.Error()+errorContact)
 	}
 }
 
@@ -70,12 +86,14 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 			zap.String("source_key", sourceKey),
 			zap.Int64("hit_count", cached.HitCount+1),
 		)
+		kb := shareKeyboard(sourceKey)
 		video := tgbotapi.NewVideo(chatID, tgbotapi.FileID(cached.TgFileID))
-		video.Caption = "🎬 Видео"
+		video.Caption = videoCaption
 		video.SupportsStreaming = true
+		video.ReplyMarkup = kb
 		if err := b.sender.Send(video); err != nil {
 			b.log.Error("failed to send cached video", zap.Error(err))
-			b.sender.Text(chatID, "❌ Не удалось отправить видео.")
+			b.sender.Text(chatID, "не удалось отправить видео 😢")
 		}
 		return
 	}
@@ -84,12 +102,40 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 	}
 
 	// 2. Кэш-мисс — скачиваем
-	b.sender.Text(chatID, "⏳ Скачиваю видео...")
+	statusMsg := b.sender.TextWithResponse(chatID, "⏳ сек, качаю")
+
+	// Анимация загрузки в фоне
+	stopAnim := make(chan struct{})
+	if statusMsg != nil {
+		go func() {
+			frames := []string{"⏳ сек, качаю.", "⏳ сек, качаю..", "⏳ сек, качаю...", "⏳ сек, качаю"}
+			i := 0
+			ticker := time.NewTicker(800 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stopAnim:
+					return
+				case <-ticker.C:
+					b.sender.EditText(chatID, statusMsg.MessageID, frames[i%len(frames)])
+					i++
+				}
+			}
+		}()
+	}
+
+	// Удаляем статус-сообщение при выходе
+	defer func() {
+		close(stopAnim)
+		if statusMsg != nil {
+			b.sender.Delete(chatID, statusMsg.MessageID)
+		}
+	}()
 
 	result, err := download.DownloadVideo(ctx, parsed.Raw, b.cfg.Proxy, b.log)
 	if err != nil {
 		b.log.Error("video download failed", zap.Error(err), zap.String("url", parsed.Raw))
-		b.sender.Text(chatID, "❌ Не удалось скачать видео. Попробуйте позже.")
+		b.sender.Text(chatID, "не удалось скачать видео 😕\nпопробуй позже"+errorContact)
 		return
 	}
 	defer cleanup(result.FilePath, b.log)
@@ -98,7 +144,7 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 	info, err := os.Stat(result.FilePath)
 	if err != nil {
 		b.log.Error("failed to stat downloaded file", zap.Error(err))
-		b.sender.Text(chatID, "❌ Ошибка чтения файла.")
+		b.sender.Text(chatID, "ошибка чтения файла 😕"+errorContact)
 		return
 	}
 
@@ -106,7 +152,7 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 
 	if fileSize > b.cfg.MaxDownloadBytes {
 		b.sender.Text(chatID, fmt.Sprintf(
-			"❌ Видео слишком большое (%d МБ). Лимит: %d МБ.",
+			"видео слишком большое (%d МБ), лимит %d МБ 😬",
 			fileSize/(1024*1024), b.cfg.MaxDownloadBytes/(1024*1024),
 		))
 		return
@@ -114,7 +160,7 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 
 	if fileSize > telegramMaxFileSize {
 		b.sender.Text(chatID, fmt.Sprintf(
-			"❌ Видео слишком большое для Telegram (%d МБ). Лимит: 50 МБ.",
+			"видео слишком большое для Telegram (%d МБ), лимит 50 МБ 😬",
 			fileSize/(1024*1024),
 		))
 		return
@@ -124,7 +170,7 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 	fileData, err := os.ReadFile(result.FilePath)
 	if err != nil {
 		b.log.Error("failed to read downloaded file", zap.Error(err))
-		b.sender.Text(chatID, "❌ Ошибка чтения файла.")
+		b.sender.Text(chatID, "ошибка чтения файла 😕"+errorContact)
 		return
 	}
 
@@ -137,9 +183,11 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 			zap.String("sha256", hashHex),
 			zap.String("existing_key", dedup.SourceKey),
 		)
+		kb := shareKeyboard(sourceKey)
 		video := tgbotapi.NewVideo(chatID, tgbotapi.FileID(dedup.TgFileID))
-		video.Caption = "🎬 Видео"
+		video.Caption = videoCaption
 		video.SupportsStreaming = true
+		video.ReplyMarkup = kb
 		if err := b.sender.Send(video); err == nil {
 			// Сохраняем новый source_key с тем же file_id
 			_ = b.store.Upsert(&storage.MediaCache{
@@ -155,15 +203,17 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 	}
 
 	// 6. Отправляем файл в Telegram
+	kb := shareKeyboard(sourceKey)
 	fileBytes := tgbotapi.FileBytes{Name: parsed.VideoID + ".mp4", Bytes: fileData}
 	video := tgbotapi.NewVideo(chatID, fileBytes)
-	video.Caption = "🎬 Видео"
+	video.Caption = videoCaption
 	video.SupportsStreaming = true
+	video.ReplyMarkup = kb
 
 	resp, sendErr := b.sender.SendWithResponse(video)
 	if sendErr != nil {
 		b.log.Error("failed to send video to telegram", zap.Error(sendErr))
-		b.sender.Text(chatID, "❌ Не удалось отправить видео в Telegram.")
+		b.sender.Text(chatID, "не удалось отправить видео 😢"+errorContact)
 		return
 	}
 
@@ -190,6 +240,51 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 		zap.String("video_id", parsed.VideoID),
 		zap.Int64("size_bytes", fileSize),
 	)
+}
+
+// --- Inline ---
+
+// shareKeyboard возвращает клавиатуру с кнопкой «Поделиться».
+func shareKeyboard(sourceKey string) tgbotapi.InlineKeyboardMarkup {
+	return tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.InlineKeyboardButton{
+				Text:              "📤 Поделиться",
+				SwitchInlineQuery: &sourceKey,
+			},
+		),
+	)
+}
+
+// handleInlineQuery обрабатывает inline-запросы для кнопки «Поделиться».
+func (b *Bot) handleInlineQuery(q *tgbotapi.InlineQuery) {
+	text := strings.TrimSpace(q.Query)
+	if text == "" {
+		return
+	}
+
+	cached, err := b.store.Lookup(text)
+	if err != nil {
+		b.log.Debug("inline query: cache miss", zap.String("query", text))
+		empty := tgbotapi.InlineConfig{InlineQueryID: q.ID, Results: []interface{}{}}
+		b.api.Request(empty)
+		return
+	}
+
+	kb := shareKeyboard(text)
+	result := tgbotapi.NewInlineQueryResultCachedVideo(text, cached.TgFileID, "Видео без водяного знака")
+	result.Caption = videoCaption
+	result.ReplyMarkup = &kb
+
+	resp := tgbotapi.InlineConfig{
+		InlineQueryID: q.ID,
+		Results:       []interface{}{result},
+		CacheTime:     300,
+	}
+
+	if _, err := b.api.Request(resp); err != nil {
+		b.log.Error("inline query failed", zap.Error(err))
+	}
 }
 
 // cleanup удаляет скачанный файл и его родительскую tmp-директорию.
