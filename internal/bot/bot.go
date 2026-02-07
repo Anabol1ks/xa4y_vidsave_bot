@@ -52,7 +52,7 @@ func (b *Bot) Run(ctx context.Context) {
 			b.log.Info("shutting down gracefully")
 			return
 		case upd := <-updates:
-			b.handleUpdate(ctx, upd)
+			go b.handleUpdate(ctx, upd)
 		}
 	}
 }
