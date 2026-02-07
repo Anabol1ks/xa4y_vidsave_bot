@@ -19,16 +19,15 @@ services:
   bot:
     build: .
     restart: unless-stopped
+    network_mode: host
     depends_on:
       postgres:
         condition: service_healthy
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     environment:
-      # Внутри docker-compose хост — это имя сервиса
-      DATABASE_URL: postgres://xa4y:${POSTGRES_PASSWORD:-vidsave_secret}@postgres:5432/vidsave?sslmode=disable
+      # network_mode: host → бот видит localhost хоста, postgres доступен через порт 5432
+      DATABASE_URL: postgres://xa4y:${POSTGRES_PASSWORD:-vidsave_secret}@127.0.0.1:5432/vidsave?sslmode=disable
 
 volumes:
   pgdata:
