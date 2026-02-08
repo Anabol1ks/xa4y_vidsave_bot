@@ -33,9 +33,29 @@ type Parsed struct {
 }
 
 var (
-	reTikTok    = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
+	// TikTok стандартный: /@user/video/12345
+	reTikTok = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
+	// TikTok короткая ссылка на www/основном домене: /t/CODE
+	reTikTokShort = regexp.MustCompile(`^/t/(\w+)/?$`)
+	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
+	reTikTokVM = regexp.MustCompile(`^/(\w+)/?$`)
+	// Instagram
 	reInstagram = regexp.MustCompile(`^/(?:reels?|p)/([A-Za-z0-9_-]+)/?$`)
 )
+
+// tikTokShortDomains — поддомены, на которых код видео идёт прямо в корне пути.
+var tikTokShortDomains = map[string]bool{
+	"vm.tiktok.com": true,
+	"vt.tiktok.com": true,
+}
+
+func isTikTokDomain(hostname string) bool {
+	return hostname == "tiktok.com" || strings.HasSuffix(hostname, ".tiktok.com")
+}
+
+func isInstagramDomain(hostname string) bool {
+	return hostname == "instagram.com" || strings.HasSuffix(hostname, ".instagram.com")
+}
 
 func Parse(raw string, allowedHosts map[string]struct{}) (Parsed, error) {
 	raw = strings.TrimSpace(raw)
@@ -61,16 +81,50 @@ func Parse(raw string, allowedHosts map[string]struct{}) (Parsed, error) {
 		Path:     u.Path,
 	}
 
-	if !isAllowed(p, allowedHosts) {
-		return Parsed{}, ErrNotAllowedHost
+	// Определяем платформу по домену
+	switch {
+	case isTikTokDomain(p.Hostname):
+		return parseTikTok(p)
+	case isInstagramDomain(p.Hostname):
+		return parseInstagram(p)
 	}
 
+	// Проверяем legacy allowed hosts (для совместимости)
+	if isAllowed(p, allowedHosts) {
+		return Parsed{}, ErrUnknownFormat
+	}
+
+	return Parsed{}, ErrNotAllowedHost
+}
+
+func parseTikTok(p Parsed) (Parsed, error) {
+	// Стандартная ссылка: /@user/video/12345
 	if m := reTikTok.FindStringSubmatch(p.Path); len(m) == 3 {
 		p.LinkType = TypeTikTok
 		p.VideoID = m[2]
 		return p, nil
 	}
 
+	// Короткая ссылка на основном домене: /t/CODE
+	if m := reTikTokShort.FindStringSubmatch(p.Path); len(m) == 2 {
+		p.LinkType = TypeTikTok
+		p.VideoID = m[1]
+		return p, nil
+	}
+
+	// Короткая ссылка на vm/vt поддоменах: /CODE
+	if tikTokShortDomains[p.Hostname] {
+		if m := reTikTokVM.FindStringSubmatch(p.Path); len(m) == 2 {
+			p.LinkType = TypeTikTok
+			p.VideoID = m[1]
+			return p, nil
+		}
+	}
+
+	return Parsed{}, ErrUnknownFormat
+}
+
+func parseInstagram(p Parsed) (Parsed, error) {
 	if m := reInstagram.FindStringSubmatch(p.Path); len(m) == 2 {
 		p.LinkType = TypeInstagram
 		p.VideoID = m[1]
@@ -80,15 +134,12 @@ func Parse(raw string, allowedHosts map[string]struct{}) (Parsed, error) {
 }
 
 func isAllowed(p Parsed, allowed map[string]struct{}) bool {
-	// 1) exact host:port (как в url.Host)
 	if _, ok := allowed[p.Host]; ok {
 		return true
 	}
-	// 2) hostname (без порта)
 	if _, ok := allowed[p.Hostname]; ok {
 		return true
 	}
-	// 3) hostname:port
 	if p.Port != "" {
 		if _, ok := allowed[p.Hostname+":"+p.Port]; ok {
 			return true
