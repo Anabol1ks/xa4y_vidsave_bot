@@ -14,8 +14,10 @@ import (
 )
 
 var (
-	ErrVideoNotFound = errors.New("video not found")
-	ErrYtDlp         = errors.New("yt-dlp error")
+	ErrVideoNotFound    = errors.New("video not found")
+	ErrYtDlp            = errors.New("yt-dlp error")
+	ErrYtDlpAuth        = errors.New("yt-dlp authentication required")
+	ErrYtDlpUnsupported = errors.New("yt-dlp unsupported url")
 )
 
 // VideoResult содержит путь к скачанному файлу.
@@ -67,13 +69,15 @@ func DownloadVideo(ctx context.Context, rawURL string, proxy string, log *zap.Lo
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		downloadErr := classifyYtDlpError(stderr.String())
 		log.Error("yt-dlp failed",
 			zap.Error(err),
+			zap.String("classified_error", downloadErr.Error()),
 			zap.String("stderr", stderr.String()),
 			zap.String("stdout", stdout.String()),
 		)
 		os.RemoveAll(tmpDir)
-		return nil, fmt.Errorf("%w: %s", ErrYtDlp, stderr.String())
+		return nil, fmt.Errorf("%w: %s", downloadErr, stderr.String())
 	}
 
 	// --print after_move:filepath выводит путь к итоговому файлу в stdout
@@ -118,4 +122,16 @@ func findFirstFile(dir string) string {
 		}
 	}
 	return ""
+}
+
+func classifyYtDlpError(stderr string) error {
+	lower := strings.ToLower(stderr)
+	switch {
+	case strings.Contains(lower, "login required"), strings.Contains(lower, "cookies"), strings.Contains(lower, "authentication"):
+		return ErrYtDlpAuth
+	case strings.Contains(lower, "unsupported url"):
+		return ErrYtDlpUnsupported
+	default:
+		return ErrYtDlp
+	}
 }

@@ -135,7 +135,15 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 	result, err := download.DownloadVideo(ctx, parsed.Raw, b.cfg.Proxy, b.log)
 	if err != nil {
 		b.log.Error("video download failed", zap.Error(err), zap.String("url", parsed.Raw))
-		b.sender.Text(chatID, "не удалось скачать видео 😕\nпопробуй позже"+errorContact)
+
+		switch {
+		case errors.Is(err, download.ErrYtDlpAuth):
+			b.sender.Text(chatID, "эта ссылка требует вход в аккаунт и в публичном режиме не скачивается 😕\nпопробуй другую публичную ссылку"+errorContact)
+		case errors.Is(err, download.ErrYtDlpUnsupported):
+			b.sender.Text(chatID, "эта ссылка ведёт не на видео или yt-dlp не умеет её скачивать 😕\nпопробуй другую ссылку"+errorContact)
+		default:
+			b.sender.Text(chatID, "не удалось скачать видео 😕\nпопробуй позже"+errorContact)
+		}
 		return
 	}
 	defer cleanup(result.FilePath, b.log)
