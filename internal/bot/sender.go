@@ -56,7 +56,14 @@ func (s *Sender) SendWithResponse(c tgbotapi.Chattable) (*tgbotapi.Message, erro
 
 // Text — удобная обёртка для отправки текстового сообщения.
 func (s *Sender) Text(chatID int64, text string) {
-	if err := s.Send(tgbotapi.NewMessage(chatID, text)); err != nil {
+	s.TextReply(chatID, 0, text)
+}
+
+// TextReply отправляет текст как ответ на сообщение, если replyToMessageID задан.
+func (s *Sender) TextReply(chatID int64, replyToMessageID int, text string) {
+	message := tgbotapi.NewMessage(chatID, text)
+	setReply(&message.BaseChat, replyToMessageID)
+	if err := s.Send(message); err != nil {
 		s.log.Warn("failed to send text message",
 			zap.Error(err),
 			zap.Int64("chat_id", chatID),
@@ -66,7 +73,14 @@ func (s *Sender) Text(chatID int64, text string) {
 
 // TextWithResponse отправляет текст и возвращает Message (для последующего редактирования/удаления).
 func (s *Sender) TextWithResponse(chatID int64, text string) *tgbotapi.Message {
-	msg, err := s.SendWithResponse(tgbotapi.NewMessage(chatID, text))
+	return s.TextWithResponseReply(chatID, 0, text)
+}
+
+// TextWithResponseReply отправляет текст как ответ и возвращает Message.
+func (s *Sender) TextWithResponseReply(chatID int64, replyToMessageID int, text string) *tgbotapi.Message {
+	message := tgbotapi.NewMessage(chatID, text)
+	setReply(&message.BaseChat, replyToMessageID)
+	msg, err := s.SendWithResponse(message)
 	if err != nil {
 		s.log.Warn("failed to send text message",
 			zap.Error(err),
@@ -75,6 +89,14 @@ func (s *Sender) TextWithResponse(chatID int64, text string) *tgbotapi.Message {
 		return nil
 	}
 	return msg
+}
+
+func setReply(base *tgbotapi.BaseChat, replyToMessageID int) {
+	if replyToMessageID == 0 {
+		return
+	}
+	base.ReplyToMessageID = replyToMessageID
+	base.AllowSendingWithoutReply = true
 }
 
 // EditText редактирует текстовое сообщение.

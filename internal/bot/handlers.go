@@ -45,7 +45,8 @@ func (b *Bot) handleCommand(chatID int64, msg *tgbotapi.Message) {
 		b.sender.Text(chatID,
 			"📌 что умею:\n\n"+
 				"• TikTok — ссылка на видео\n"+
-				"• Instagram — ссылка на reel\n\n"+
+				"• Instagram — ссылка на reel\n"+
+				"• в группах — отвечаю видео на первую ссылку в сообщении\n\n"+
 				"просто кидай ссылку 👇",
 		)
 	default:
@@ -75,8 +76,11 @@ func (b *Bot) handleParseError(chatID int64, text string, err error) {
 // Telegram Bot API лимит — 50 MB для отправки видео.
 const telegramMaxFileSize = 50 * 1024 * 1024
 
-func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Parsed) {
+func (b *Bot) handleDownload(ctx context.Context, chatID int64, replyToMessageID int, parsed link.Parsed) {
 	sourceKey := storage.SourceKeyFromParsed(string(parsed.LinkType), parsed.VideoID)
+	replyText := func(text string) {
+		b.sender.TextReply(chatID, replyToMessageID, text)
+	}
 
 	// 1. Проверяем кэш по source_key
 	cached, err := b.store.Lookup(sourceKey)
@@ -91,9 +95,10 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 		video.Caption = videoCaption
 		video.SupportsStreaming = true
 		video.ReplyMarkup = kb
+		setReply(&video.BaseChat, replyToMessageID)
 		if err := b.sender.Send(video); err != nil {
 			b.log.Error("failed to send cached video", zap.Error(err))
-			b.sender.Text(chatID, "не удалось отправить видео 😢")
+			replyText("не удалось отправить видео 😢")
 		}
 		return
 	}
@@ -102,7 +107,7 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 	}
 
 	// 2. Кэш-мисс — скачиваем
-	statusMsg := b.sender.TextWithResponse(chatID, "⏳ сек, качаю")
+	statusMsg := b.sender.TextWithResponseReply(chatID, replyToMessageID, "⏳ сек, качаю")
 
 	// Анимация загрузки в фоне
 	stopAnim := make(chan struct{})
@@ -132,17 +137,17 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 		}
 	}()
 
-	result, err := download.DownloadVideo(ctx, parsed.Raw, b.cfg.Proxy, b.log)
+	result, err := b.downloadVideoWithLimit(ctx, parsed.Raw)
 	if err != nil {
 		b.log.Error("video download failed", zap.Error(err), zap.String("url", parsed.Raw))
 
 		switch {
 		case errors.Is(err, download.ErrYtDlpAuth):
-			b.sender.Text(chatID, "эта ссылка требует вход в аккаунт и в публичном режиме не скачивается 😕\nпопробуй другую публичную ссылку"+errorContact)
+			replyText("эта ссылка требует вход в аккаунт и в публичном режиме не скачивается 😕\nпопробуй другую публичную ссылку" + errorContact)
 		case errors.Is(err, download.ErrYtDlpUnsupported):
-			b.sender.Text(chatID, "эта ссылка ведёт не на видео или yt-dlp не умеет её скачивать 😕\nпопробуй другую ссылку"+errorContact)
+			replyText("эта ссылка ведёт не на видео или yt-dlp не умеет её скачивать 😕\nпопробуй другую ссылку" + errorContact)
 		default:
-			b.sender.Text(chatID, "не удалось скачать видео 😕\nпопробуй позже"+errorContact)
+			replyText("не удалось скачать видео 😕\nпопробуй позже" + errorContact)
 		}
 		return
 	}
@@ -152,14 +157,14 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 	info, err := os.Stat(result.FilePath)
 	if err != nil {
 		b.log.Error("failed to stat downloaded file", zap.Error(err))
-		b.sender.Text(chatID, "ошибка чтения файла 😕"+errorContact)
+		replyText("ошибка чтения файла 😕" + errorContact)
 		return
 	}
 
 	fileSize := info.Size()
 
 	if fileSize > b.cfg.MaxDownloadBytes {
-		b.sender.Text(chatID, fmt.Sprintf(
+		replyText(fmt.Sprintf(
 			"видео слишком большое (%d МБ), лимит %d МБ 😬",
 			fileSize/(1024*1024), b.cfg.MaxDownloadBytes/(1024*1024),
 		))
@@ -167,7 +172,7 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 	}
 
 	if fileSize > telegramMaxFileSize {
-		b.sender.Text(chatID, fmt.Sprintf(
+		replyText(fmt.Sprintf(
 			"видео слишком большое для Telegram (%d МБ), лимит 50 МБ 😬",
 			fileSize/(1024*1024),
 		))
@@ -178,7 +183,7 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 	fileData, err := os.ReadFile(result.FilePath)
 	if err != nil {
 		b.log.Error("failed to read downloaded file", zap.Error(err))
-		b.sender.Text(chatID, "ошибка чтения файла 😕"+errorContact)
+		replyText("ошибка чтения файла 😕" + errorContact)
 		return
 	}
 
@@ -196,6 +201,7 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 		video.Caption = videoCaption
 		video.SupportsStreaming = true
 		video.ReplyMarkup = kb
+		setReply(&video.BaseChat, replyToMessageID)
 		if err := b.sender.Send(video); err == nil {
 			// Сохраняем новый source_key с тем же file_id
 			_ = b.store.Upsert(&storage.MediaCache{
@@ -217,11 +223,12 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 	video.Caption = videoCaption
 	video.SupportsStreaming = true
 	video.ReplyMarkup = kb
+	setReply(&video.BaseChat, replyToMessageID)
 
 	resp, sendErr := b.sender.SendWithResponse(video)
 	if sendErr != nil {
 		b.log.Error("failed to send video to telegram", zap.Error(sendErr))
-		b.sender.Text(chatID, "не удалось отправить видео 😢"+errorContact)
+		replyText("не удалось отправить видео 😢" + errorContact)
 		return
 	}
 
@@ -248,6 +255,17 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, parsed link.Pars
 		zap.String("video_id", parsed.VideoID),
 		zap.Int64("size_bytes", fileSize),
 	)
+}
+
+func (b *Bot) downloadVideoWithLimit(ctx context.Context, rawURL string) (*download.VideoResult, error) {
+	select {
+	case b.downloadSlots <- struct{}{}:
+		defer func() { <-b.downloadSlots }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	return download.DownloadVideo(ctx, rawURL, b.cfg.Proxy, b.log)
 }
 
 // --- Inline ---
