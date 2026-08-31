@@ -9,7 +9,8 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      # PostgreSQL должен быть доступен только локальному bot-контейнеру через host network.
+      - "127.0.0.1:55432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U xa4y -d vidsave"]
       interval: 5s
@@ -30,8 +31,8 @@ services:
     env_file:
       - .env
     environment:
-      # network_mode: host → бот видит localhost хоста, postgres доступен через порт 5432
-      DATABASE_URL: postgres://xa4y:${POSTGRES_PASSWORD:-vidsave_secret}@127.0.0.1:5432/vidsave?sslmode=disable
+      # network_mode: host → бот видит localhost хоста, postgres доступен через loopback-порт 55432
+      DATABASE_URL: postgres://xa4y:${POSTGRES_PASSWORD:-vidsave_secret}@127.0.0.1:55432/vidsave?sslmode=disable
 
 volumes:
   pgdata:

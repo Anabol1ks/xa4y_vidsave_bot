@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 	"xa4yy_vidsave/internal/download"
 	"xa4yy_vidsave/internal/link"
 	"xa4yy_vidsave/internal/storage"
@@ -109,29 +108,8 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, replyToMessageID
 	// 2. Кэш-мисс — скачиваем
 	statusMsg := b.sender.TextWithResponseReply(chatID, replyToMessageID, "⏳ сек, качаю")
 
-	// Анимация загрузки в фоне
-	stopAnim := make(chan struct{})
-	if statusMsg != nil {
-		go func() {
-			frames := []string{"⏳ сек, качаю.", "⏳ сек, качаю..", "⏳ сек, качаю...", "⏳ сек, качаю"}
-			i := 0
-			ticker := time.NewTicker(800 * time.Millisecond)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-stopAnim:
-					return
-				case <-ticker.C:
-					b.sender.EditText(chatID, statusMsg.MessageID, frames[i%len(frames)])
-					i++
-				}
-			}
-		}()
-	}
-
 	// Удаляем статус-сообщение при выходе
 	defer func() {
-		close(stopAnim)
 		if statusMsg != nil {
 			b.sender.Delete(chatID, statusMsg.MessageID)
 		}
@@ -231,24 +209,27 @@ func (b *Bot) handleDownload(ctx context.Context, chatID int64, replyToMessageID
 		replyText("не удалось отправить видео 😢" + errorContact)
 		return
 	}
+	if resp == nil || resp.Video == nil {
+		b.log.Error("telegram returned an empty video response")
+		replyText("не удалось отправить видео 😢" + errorContact)
+		return
+	}
 
 	// 7. Извлекаем file_id из ответа Telegram и сохраняем в кэш
-	if resp.Video != nil {
-		entry := &storage.MediaCache{
-			SourceKey:      sourceKey,
-			SHA256:         hashHex,
-			TgFileID:       resp.Video.FileID,
-			TgFileUniqueID: resp.Video.FileUniqueID,
-			SizeBytes:      fileSize,
-		}
-		if err := b.store.Upsert(entry); err != nil {
-			b.log.Error("failed to save cache entry", zap.Error(err))
-		} else {
-			b.log.Info("cached video",
-				zap.String("source_key", sourceKey),
-				zap.String("file_id", resp.Video.FileID),
-			)
-		}
+	entry := &storage.MediaCache{
+		SourceKey:      sourceKey,
+		SHA256:         hashHex,
+		TgFileID:       resp.Video.FileID,
+		TgFileUniqueID: resp.Video.FileUniqueID,
+		SizeBytes:      fileSize,
+	}
+	if err := b.store.Upsert(entry); err != nil {
+		b.log.Error("failed to save cache entry", zap.Error(err))
+	} else {
+		b.log.Info("cached video",
+			zap.String("source_key", sourceKey),
+			zap.String("file_id", resp.Video.FileID),
+		)
 	}
 
 	b.log.Info("video sent successfully",

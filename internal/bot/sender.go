@@ -1,6 +1,8 @@
 package bot
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -11,16 +13,24 @@ import (
 
 // Sender — обёртка над bot.Send с обработкой rate-limit (429).
 type Sender struct {
-	api *tgbotapi.BotAPI
-	log *zap.Logger
+	api   telegramAPI
+	log   *zap.Logger
+	sleep func(time.Duration)
+}
+
+type telegramAPI interface {
+	Send(tgbotapi.Chattable) (tgbotapi.Message, error)
+	Request(tgbotapi.Chattable) (*tgbotapi.APIResponse, error)
 }
 
 func NewSender(api *tgbotapi.BotAPI, log *zap.Logger) *Sender {
-	return &Sender{api: api, log: log}
+	return &Sender{api: api, log: log, sleep: time.Sleep}
 }
 
 // maxRetries — сколько раз повторяем при 429.
 const maxRetries = 3
+
+var errTelegramRateLimit = errors.New("telegram rate limit exhausted")
 
 // Send отправляет Chattable (видео, фото, текст и т.д.) с retry при 429.
 func (s *Sender) Send(c tgbotapi.Chattable) error {
@@ -38,12 +48,15 @@ func (s *Sender) SendWithResponse(c tgbotapi.Chattable) (*tgbotapi.Message, erro
 
 		// Проверяем 429 Too Many Requests
 		if isRateLimited(err) {
+			if attempt == maxRetries {
+				return nil, fmt.Errorf("%w after %d attempts: %v", errTelegramRateLimit, maxRetries, err)
+			}
 			wait := retryAfter(err, attempt)
 			s.log.Warn("rate limited by Telegram, waiting",
 				zap.Duration("wait", wait),
 				zap.Int("attempt", attempt),
 			)
-			time.Sleep(wait)
+			s.sleep(wait)
 			continue
 		}
 
@@ -51,7 +64,7 @@ func (s *Sender) SendWithResponse(c tgbotapi.Chattable) (*tgbotapi.Message, erro
 		return nil, err
 	}
 
-	return nil, nil
+	return nil, errTelegramRateLimit
 }
 
 // Text — удобная обёртка для отправки текстового сообщения.
