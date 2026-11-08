@@ -109,7 +109,7 @@ func ytDlpArgs(rawURL, outTemplate, proxy string, platform link.Type) []string {
 	}
 	if platform == link.TypeYouTube {
 		args = append(args,
-			"-f", "bv[ext=mp4][width<=1080]+ba[ext=m4a]/b[ext=mp4]",
+			"-f", "bv[ext=mp4][vcodec^=avc1][width<=1080]+ba[ext=m4a]/b[ext=mp4][vcodec^=avc1]/bv[ext=mp4][width<=1080]+ba[ext=m4a]/b[ext=mp4]",
 			"--merge-output-format", "mp4",
 			"--js-runtimes", "node",
 			"--match-filter", "duration <= 180 & !is_live",
