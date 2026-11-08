@@ -43,7 +43,7 @@ var (
 	// Instagram
 	reInstagram = regexp.MustCompile(`^/(?:reels?|p)/([A-Za-z0-9_-]+)/?$`)
 	// YouTube Shorts video IDs consist of 11 URL-safe characters.
-	reYouTubeShorts = regexp.MustCompile(`^/shorts/([A-Za-z0-9_-]{11})/?$`)
+	reYouTubeShorts   = regexp.MustCompile(`^/shorts/([A-Za-z0-9_-]{11})/?$`)
 	reYouTubeShortURL = regexp.MustCompile(`^/([A-Za-z0-9_-]{11})/?$`)
 )
 
