@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"xa4yy_vidsave/internal/link"
+
 	"go.uber.org/zap"
 )
 
@@ -18,6 +20,7 @@ var (
 	ErrYtDlp            = errors.New("yt-dlp error")
 	ErrYtDlpAuth        = errors.New("yt-dlp authentication required")
 	ErrYtDlpUnsupported = errors.New("yt-dlp unsupported url")
+	ErrVideoTooLong     = errors.New("youtube video exceeds shorts duration limit")
 )
 
 // VideoResult содержит путь к скачанному файлу.
@@ -26,10 +29,10 @@ type VideoResult struct {
 }
 
 // DownloadVideo скачивает видео по оригинальному URL через yt-dlp.
-// Работает с Instagram Reels, TikTok и другими поддерживаемыми сайтами.
+// Работает с Instagram Reels, TikTok и YouTube Shorts.
 // Возвращает путь к временному файлу (без водяного знака).
 // proxy — строка вида "socks5h://host:port" или "http://host:port" (может быть пустой).
-func DownloadVideo(ctx context.Context, rawURL string, proxy string, log *zap.Logger) (*VideoResult, error) {
+func DownloadVideo(ctx context.Context, rawURL string, proxy string, platform link.Type, log *zap.Logger) (*VideoResult, error) {
 	// Создаём временную директорию для скачивания
 	tmpDir, err := os.MkdirTemp("", "vidsave_*")
 	if err != nil {
@@ -38,27 +41,7 @@ func DownloadVideo(ctx context.Context, rawURL string, proxy string, log *zap.Lo
 
 	outTemplate := filepath.Join(tmpDir, "video.%(ext)s")
 
-	args := []string{
-		"--no-warnings",
-		"--no-playlist",
-		"--no-overwrites",
-		"-f", "best",
-		"-o", outTemplate,
-		// Лимит размера файла — 50 MB (Telegram Bot API limit)
-		"--max-filesize", "50M",
-		// Таймаут на сокет-операции (не зависать вечно)
-		"--socket-timeout", "30",
-		// Количество ретраев при ошибках сети
-		"--retries", "3",
-		// Выводим итоговый путь к файлу после всех перемещений/мержей
-		"--print", "after_move:filepath",
-	}
-
-	if proxy != "" {
-		args = append(args, "--proxy", proxy)
-	}
-
-	args = append(args, rawURL)
+	args := ytDlpArgs(rawURL, outTemplate, proxy, platform)
 
 	log.Debug("running yt-dlp", zap.Strings("args", args))
 
@@ -91,6 +74,10 @@ func DownloadVideo(ctx context.Context, rawURL string, proxy string, log *zap.Lo
 	}
 
 	if filePath == "" {
+		if strings.Contains(strings.ToLower(stdout.String()+" "+stderr.String()), "does not pass filter") && platform == link.TypeYouTube {
+			os.RemoveAll(tmpDir)
+			return nil, ErrVideoTooLong
+		}
 		// Логируем содержимое tmpDir для отладки
 		entries, _ := os.ReadDir(tmpDir)
 		names := make([]string, 0, len(entries))
@@ -104,6 +91,36 @@ func DownloadVideo(ctx context.Context, rawURL string, proxy string, log *zap.Lo
 
 	log.Info("video downloaded", zap.String("path", filePath))
 	return &VideoResult{FilePath: filePath}, nil
+}
+
+// ytDlpArgs keeps existing TikTok/Instagram behavior and selects an MP4
+// video+audio pair for YouTube. Vertical Shorts can be up to 1080x1920;
+// limit by width, not height, to preserve portrait quality.
+func ytDlpArgs(rawURL, outTemplate, proxy string, platform link.Type) []string {
+	args := []string{
+		"--no-warnings",
+		"--no-playlist",
+		"--no-overwrites",
+		"-o", outTemplate,
+		"--max-filesize", "50M",
+		"--socket-timeout", "30",
+		"--retries", "3",
+		"--print", "after_move:filepath",
+	}
+	if platform == link.TypeYouTube {
+		args = append(args,
+			"-f", "bv[ext=mp4][width<=1080]+ba[ext=m4a]/b[ext=mp4]",
+			"--merge-output-format", "mp4",
+			"--js-runtimes", "node",
+			"--match-filter", "duration <= 180 & !is_live",
+		)
+	} else {
+		args = append(args, "-f", "best")
+	}
+	if proxy != "" {
+		args = append(args, "--proxy", proxy)
+	}
+	return append(args, rawURL)
 }
 
 func fileExists(path string) bool {
@@ -127,7 +144,7 @@ func findFirstFile(dir string) string {
 func classifyYtDlpError(stderr string) error {
 	lower := strings.ToLower(stderr)
 	switch {
-	case strings.Contains(lower, "login required"), strings.Contains(lower, "cookies"), strings.Contains(lower, "authentication"):
+	case strings.Contains(lower, "login required"), strings.Contains(lower, "cookies"), strings.Contains(lower, "authentication"), strings.Contains(lower, "sign in to confirm"), strings.Contains(lower, "confirm you're not a bot"):
 		return ErrYtDlpAuth
 	case strings.Contains(lower, "unsupported url"):
 		return ErrYtDlpUnsupported
