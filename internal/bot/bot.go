@@ -141,7 +141,7 @@ func (b *Bot) handleUpdate(ctx context.Context, upd tgbotapi.Update) {
 	)
 
 	switch parsed.LinkType {
-	case link.TypeInstagram, link.TypeTikTok:
+	case link.TypeInstagram, link.TypeTikTok, link.TypeYouTube:
 		b.handleDownload(ctx, chatID, replyToMessageID, parsed)
 	default:
 		b.sender.TextReply(chatID, replyToMessageID, "этот тип пока не поддерживаю 😕")
