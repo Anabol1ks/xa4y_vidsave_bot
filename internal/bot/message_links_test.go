@@ -10,6 +10,7 @@ import (
 func TestFirstSupportedLink(t *testing.T) {
 	instagramURL := "https://www.instagram.com/reel/DbJLODStVAd/?igsh=test"
 	tikTokURL := "https://www.tiktok.com/@user/video/1234567890"
+	youTubeURL := "https://www.youtube.com/shorts/jNQXAC9IVRw?si=abc"
 
 	tests := []struct {
 		name      string
@@ -23,6 +24,20 @@ func TestFirstSupportedLink(t *testing.T) {
 			message:   &tgbotapi.Message{Text: "смотри " + instagramURL + " 🔥"},
 			wantType:  "instagram",
 			wantID:    "DbJLODStVAd",
+			wantFound: true,
+		},
+		{
+			name:      "YouTube Shorts in message with punctuation",
+			message:   &tgbotapi.Message{Text: "🔥 смотри (" + youTubeURL + ")."},
+			wantType:  "youtube",
+			wantID:    "jNQXAC9IVRw",
+			wantFound: true,
+		},
+		{
+			name:      "YouTube short share URL in caption",
+			message:   &tgbotapi.Message{Caption: "https://youtu.be/jNQXAC9IVRw?si=abc"},
+			wantType:  "youtube",
+			wantID:    "jNQXAC9IVRw",
 			wantFound: true,
 		},
 		{
