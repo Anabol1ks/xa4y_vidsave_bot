@@ -30,7 +30,7 @@ func (b *Bot) handleCommand(chatID int64, msg *tgbotapi.Message) {
 	switch msg.Command() {
 	case "start":
 		text := "Барев! 👋\n\n" +
-			"скинь ссылку на видео из TikTok или Instagram —\n" +
+			"скинь ссылку на TikTok, Instagram Reels или YouTube Shorts —\n" +
 			"верну без водяного знака 🔥\n\n" +
 			"канал → @XA4yy"
 		reply := tgbotapi.NewMessage(chatID, text)
@@ -45,6 +45,7 @@ func (b *Bot) handleCommand(chatID int64, msg *tgbotapi.Message) {
 			"📌 что умею:\n\n"+
 				"• TikTok — ссылка на видео\n"+
 				"• Instagram — ссылка на reel\n"+
+				"• YouTube — ссылка на Shorts\n"+
 				"• в группах — отвечаю видео на первую ссылку в сообщении\n\n"+
 				"просто кидай ссылку 👇",
 		)
@@ -62,7 +63,7 @@ func (b *Bot) handleParseError(chatID int64, text string, err error) {
 	case link.ErrNotURL:
 		b.sender.Text(chatID, "это не похоже на ссылку 🧐")
 	case link.ErrNotAllowedHost:
-		b.sender.Text(chatID, "такой домен не поддерживаю 😕\n\nпока умею только TikTok и Instagram"+errorContact)
+		b.sender.Text(chatID, "такой домен не поддерживаю 😕\n\nпока умею TikTok, Instagram и YouTube Shorts"+errorContact)
 	case link.ErrUnknownFormat:
 		b.sender.Text(chatID, "не могу разобрать ссылку 🤔\nкинь прямую ссылку на видео"+errorContact)
 	default:
