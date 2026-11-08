@@ -18,6 +18,7 @@ type Type string
 const (
 	TypeTikTok    Type = "tiktok"
 	TypeInstagram Type = "instagram"
+	TypeYouTube   Type = "youtube"
 )
 
 type Parsed struct {
@@ -40,7 +41,139 @@ var (
 	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
 	reTikTokVM = regexp.MustCompile(`^/(\w+)/?$`)
 	// Instagram
-	reInstagram = regexp.MustCompile(`^/(?:reels?|p)/([A-Za-z0-9_-]+)/?$`)
+	reInstagram = regexp.MustCompile(`^/(?:reels?|p)/([A-Za-z0-9_-]+)/?package link
+
+import (
+	"errors"
+	"net/url"
+	"regexp"
+	"strings"
+)
+
+var (
+	ErrNotURL         = errors.New("not a valid url")
+	ErrNotAllowedHost = errors.New("host not allowed")
+	ErrUnknownFormat  = errors.New("unknown link format")
+)
+
+type Type string
+
+const (
+	TypeTikTok    Type = "tiktok"
+	TypeInstagram Type = "instagram"
+	TypeYouTube   Type = "youtube"
+)
+
+type Parsed struct {
+	Raw      string
+	Scheme   string
+	Host     string
+	Hostname string
+	Port     string
+	Path     string
+
+	LinkType Type
+	VideoID  string
+}
+
+var (
+	// TikTok стандартный: /@user/video/12345
+	reTikTok = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
+	// TikTok короткая ссылка на www/основном домене: /t/CODE
+	reTikTokShort = regexp.MustCompile(`^/t/(\w+)/?$`)
+	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
+	reTikTokVM = regexp.MustCompile(`^/(\w+)/?$`)
+	// Instagram
+)
+	// YouTube Shorts use the same 11-character video ID as standard videos.
+	reYouTubeShorts = regexp.MustCompile(`^/shorts/([A-Za-z0-9_-]{11})/?package link
+
+import (
+	"errors"
+	"net/url"
+	"regexp"
+	"strings"
+)
+
+var (
+	ErrNotURL         = errors.New("not a valid url")
+	ErrNotAllowedHost = errors.New("host not allowed")
+	ErrUnknownFormat  = errors.New("unknown link format")
+)
+
+type Type string
+
+const (
+	TypeTikTok    Type = "tiktok"
+	TypeInstagram Type = "instagram"
+	TypeYouTube   Type = "youtube"
+)
+
+type Parsed struct {
+	Raw      string
+	Scheme   string
+	Host     string
+	Hostname string
+	Port     string
+	Path     string
+
+	LinkType Type
+	VideoID  string
+}
+
+var (
+	// TikTok стандартный: /@user/video/12345
+	reTikTok = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
+	// TikTok короткая ссылка на www/основном домене: /t/CODE
+	reTikTokShort = regexp.MustCompile(`^/t/(\w+)/?$`)
+	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
+	reTikTokVM = regexp.MustCompile(`^/(\w+)/?$`)
+	// Instagram
+)
+	reYouTubeShortURL = regexp.MustCompile(`^/([A-Za-z0-9_-]{11})/?package link
+
+import (
+	"errors"
+	"net/url"
+	"regexp"
+	"strings"
+)
+
+var (
+	ErrNotURL         = errors.New("not a valid url")
+	ErrNotAllowedHost = errors.New("host not allowed")
+	ErrUnknownFormat  = errors.New("unknown link format")
+)
+
+type Type string
+
+const (
+	TypeTikTok    Type = "tiktok"
+	TypeInstagram Type = "instagram"
+	TypeYouTube   Type = "youtube"
+)
+
+type Parsed struct {
+	Raw      string
+	Scheme   string
+	Host     string
+	Hostname string
+	Port     string
+	Path     string
+
+	LinkType Type
+	VideoID  string
+}
+
+var (
+	// TikTok стандартный: /@user/video/12345
+	reTikTok = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
+	// TikTok короткая ссылка на www/основном домене: /t/CODE
+	reTikTokShort = regexp.MustCompile(`^/t/(\w+)/?$`)
+	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
+	reTikTokVM = regexp.MustCompile(`^/(\w+)/?$`)
+	// Instagram
+)
 )
 
 // tikTokShortDomains — поддомены, на которых код видео идёт прямо в корне пути.
@@ -55,6 +188,14 @@ func isTikTokDomain(hostname string) bool {
 
 func isInstagramDomain(hostname string) bool {
 	return hostname == "instagram.com" || strings.HasSuffix(hostname, ".instagram.com")
+}
+
+func isYouTubeDomain(hostname string) bool {
+	return hostname == "youtube.com" || strings.HasSuffix(hostname, ".youtube.com")
+}
+
+func isYouTubeShortDomain(hostname string) bool {
+	return hostname == "youtu.be" || hostname == "www.youtu.be"
 }
 
 func Parse(raw string, allowedHosts map[string]struct{}) (Parsed, error) {
@@ -87,6 +228,8 @@ func Parse(raw string, allowedHosts map[string]struct{}) (Parsed, error) {
 		return parseTikTok(p)
 	case isInstagramDomain(p.Hostname):
 		return parseInstagram(p)
+	case isYouTubeDomain(p.Hostname), isYouTubeShortDomain(p.Hostname):
+		return parseYouTube(p)
 	}
 
 	// Проверяем legacy allowed hosts (для совместимости)
@@ -131,6 +274,23 @@ func parseInstagram(p Parsed) (Parsed, error) {
 		return p, nil
 	}
 	return Parsed{}, ErrUnknownFormat
+}
+
+// parseYouTube accepts only Shorts URLs and short share links, not playlists
+// or arbitrary /watch URLs. The downloader also limits YouTube duration.
+func parseYouTube(p Parsed) (Parsed, error) {
+	var match []string
+	if isYouTubeShortDomain(p.Hostname) {
+		match = reYouTubeShortURL.FindStringSubmatch(p.Path)
+	} else {
+		match = reYouTubeShorts.FindStringSubmatch(p.Path)
+	}
+	if len(match) != 2 {
+		return Parsed{}, ErrUnknownFormat
+	}
+	p.LinkType = TypeYouTube
+	p.VideoID = match[1]
+	return p, nil
 }
 
 func isAllowed(p Parsed, allowed map[string]struct{}) bool {
