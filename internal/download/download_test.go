@@ -54,7 +54,7 @@ func TestYtDlpArgs(t *testing.T) {
 		wantArgs []string
 		noArgs   []string
 	}{
-		{"youtube", link.TypeYouTube, videoURL, "", []string{"-f", "bv[ext=mp4][width<=1080]+ba[ext=m4a]/b[ext=mp4]", "--merge-output-format", "mp4", "--js-runtimes", "node", "--match-filter", "duration <= 180 & !is_live"}, []string{"best", "--proxy"}},
+		{"youtube", link.TypeYouTube, videoURL, "", []string{"-f", "bv[ext=mp4][vcodec^=avc1][width<=1080]+ba[ext=m4a]/b[ext=mp4][vcodec^=avc1]/bv[ext=mp4][width<=1080]+ba[ext=m4a]/b[ext=mp4]", "--merge-output-format", "mp4", "--js-runtimes", "node", "--match-filter", "duration <= 180 & !is_live"}, []string{"best", "--proxy"}},
 		{"instagram untouched", link.TypeInstagram, "https://instagram.com/reel/DbJLODStVAd", "", []string{"-f", "best"}, []string{"--js-runtimes", "--match-filter"}},
 		{"tiktok with proxy", link.TypeTikTok, "https://www.tiktok.com/@user/video/123", "socks5h://127.0.0.1:1080", []string{"-f", "best", "--proxy", "socks5h://127.0.0.1:1080"}, []string{"--js-runtimes", "--match-filter"}},
 	}
