@@ -71,7 +71,9 @@ func TestYtDlpArgs(t *testing.T) {
 			}
 			for _, forbidden := range tc.noArgs {
 				for _, arg := range args {
-					if arg == forbidden { t.Errorf("unexpected argument %q", forbidden) }
+					if arg == forbidden {
+						t.Errorf("unexpected argument %q", forbidden)
+					}
 				}
 			}
 		})
@@ -80,7 +82,9 @@ func TestYtDlpArgs(t *testing.T) {
 
 func hasArgPair(args []string, key, value string) bool {
 	for i := 0; i+1 < len(args); i++ {
-		if args[i] == key && args[i+1] == value { return true }
+		if args[i] == key && args[i+1] == value {
+			return true
+		}
 	}
 	return false
 }
