@@ -9,7 +9,7 @@ func TestYouTubeShortsParse(t *testing.T) {
 	const id = "jNQXAC9IVRw"
 	tests := []struct {
 		name string
-		url string
+		url  string
 	}{
 		{"shorts www", "https://www.youtube.com/shorts/" + id},
 		{"shorts trailing slash", "https://youtube.com/shorts/" + id + "/"},
@@ -21,17 +21,25 @@ func TestYouTubeShortsParse(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := Parse(tc.url, nil)
-			if err != nil { t.Fatalf("Parse() error = %v", err) }
-			if got.LinkType != TypeYouTube { t.Errorf("type = %q, want youtube", got.LinkType) }
-			if got.VideoID != id { t.Errorf("id = %q, want %q", got.VideoID, id) }
-			if got.Raw != tc.url { t.Errorf("raw = %q, want input", got.Raw) }
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			if got.LinkType != TypeYouTube {
+				t.Errorf("type = %q, want youtube", got.LinkType)
+			}
+			if got.VideoID != id {
+				t.Errorf("id = %q, want %q", got.VideoID, id)
+			}
+			if got.Raw != tc.url {
+				t.Errorf("raw = %q, want input", got.Raw)
+			}
 		})
 	}
 }
 
 func TestYouTubeRejectsNonShorts(t *testing.T) {
 	tests := []struct {
-		url string
+		url  string
 		want error
 	}{
 		{"https://youtube.com/watch?v=jNQXAC9IVRw", ErrUnknownFormat},
@@ -46,16 +54,18 @@ func TestYouTubeRejectsNonShorts(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.url, func(t *testing.T) {
 			_, err := Parse(tc.url, nil)
-			if !errors.Is(err, tc.want) { t.Errorf("Parse() error = %v, want %v", err, tc.want) }
+			if !errors.Is(err, tc.want) {
+				t.Errorf("Parse() error = %v, want %v", err, tc.want)
+			}
 		})
 	}
 }
 
 func TestExistingPlatformsParse(t *testing.T) {
 	tests := []struct {
-		url string
+		url      string
 		platform Type
-		id string
+		id       string
 	}{
 		{"https://www.instagram.com/reel/DbJLODStVAd/", TypeInstagram, "DbJLODStVAd"},
 		{"https://vm.tiktok.com/ZMtest123/", TypeTikTok, "ZMtest123"},
@@ -63,7 +73,12 @@ func TestExistingPlatformsParse(t *testing.T) {
 	}
 	for _, tc := range tests {
 		got, err := Parse(tc.url, nil)
-		if err != nil { t.Errorf("%s: %v", tc.url, err); continue }
-		if got.LinkType != tc.platform || got.VideoID != tc.id { t.Errorf("%s: got %s/%s", tc.url, got.LinkType, got.VideoID) }
+		if err != nil {
+			t.Errorf("%s: %v", tc.url, err)
+			continue
+		}
+		if got.LinkType != tc.platform || got.VideoID != tc.id {
+			t.Errorf("%s: got %s/%s", tc.url, got.LinkType, got.VideoID)
+		}
 	}
 }
