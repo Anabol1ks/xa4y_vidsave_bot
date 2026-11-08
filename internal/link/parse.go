@@ -41,139 +41,10 @@ var (
 	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
 	reTikTokVM = regexp.MustCompile(`^/(\w+)/?$`)
 	// Instagram
-	reInstagram = regexp.MustCompile(`^/(?:reels?|p)/([A-Za-z0-9_-]+)/?package link
-
-import (
-	"errors"
-	"net/url"
-	"regexp"
-	"strings"
-)
-
-var (
-	ErrNotURL         = errors.New("not a valid url")
-	ErrNotAllowedHost = errors.New("host not allowed")
-	ErrUnknownFormat  = errors.New("unknown link format")
-)
-
-type Type string
-
-const (
-	TypeTikTok    Type = "tiktok"
-	TypeInstagram Type = "instagram"
-	TypeYouTube   Type = "youtube"
-)
-
-type Parsed struct {
-	Raw      string
-	Scheme   string
-	Host     string
-	Hostname string
-	Port     string
-	Path     string
-
-	LinkType Type
-	VideoID  string
-}
-
-var (
-	// TikTok стандартный: /@user/video/12345
-	reTikTok = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
-	// TikTok короткая ссылка на www/основном домене: /t/CODE
-	reTikTokShort = regexp.MustCompile(`^/t/(\w+)/?$`)
-	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
-	reTikTokVM = regexp.MustCompile(`^/(\w+)/?$`)
-	// Instagram
-)
-	// YouTube Shorts use the same 11-character video ID as standard videos.
-	reYouTubeShorts = regexp.MustCompile(`^/shorts/([A-Za-z0-9_-]{11})/?package link
-
-import (
-	"errors"
-	"net/url"
-	"regexp"
-	"strings"
-)
-
-var (
-	ErrNotURL         = errors.New("not a valid url")
-	ErrNotAllowedHost = errors.New("host not allowed")
-	ErrUnknownFormat  = errors.New("unknown link format")
-)
-
-type Type string
-
-const (
-	TypeTikTok    Type = "tiktok"
-	TypeInstagram Type = "instagram"
-	TypeYouTube   Type = "youtube"
-)
-
-type Parsed struct {
-	Raw      string
-	Scheme   string
-	Host     string
-	Hostname string
-	Port     string
-	Path     string
-
-	LinkType Type
-	VideoID  string
-}
-
-var (
-	// TikTok стандартный: /@user/video/12345
-	reTikTok = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
-	// TikTok короткая ссылка на www/основном домене: /t/CODE
-	reTikTokShort = regexp.MustCompile(`^/t/(\w+)/?$`)
-	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
-	reTikTokVM = regexp.MustCompile(`^/(\w+)/?$`)
-	// Instagram
-)
-	reYouTubeShortURL = regexp.MustCompile(`^/([A-Za-z0-9_-]{11})/?package link
-
-import (
-	"errors"
-	"net/url"
-	"regexp"
-	"strings"
-)
-
-var (
-	ErrNotURL         = errors.New("not a valid url")
-	ErrNotAllowedHost = errors.New("host not allowed")
-	ErrUnknownFormat  = errors.New("unknown link format")
-)
-
-type Type string
-
-const (
-	TypeTikTok    Type = "tiktok"
-	TypeInstagram Type = "instagram"
-	TypeYouTube   Type = "youtube"
-)
-
-type Parsed struct {
-	Raw      string
-	Scheme   string
-	Host     string
-	Hostname string
-	Port     string
-	Path     string
-
-	LinkType Type
-	VideoID  string
-}
-
-var (
-	// TikTok стандартный: /@user/video/12345
-	reTikTok = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
-	// TikTok короткая ссылка на www/основном домене: /t/CODE
-	reTikTokShort = regexp.MustCompile(`^/t/(\w+)/?$`)
-	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
-	reTikTokVM = regexp.MustCompile(`^/(\w+)/?$`)
-	// Instagram
-)
+	reInstagram = regexp.MustCompile(`^/(?:reels?|p)/([A-Za-z0-9_-]+)/?$`)
+	// YouTube Shorts video IDs consist of 11 URL-safe characters.
+	reYouTubeShorts = regexp.MustCompile(`^/shorts/([A-Za-z0-9_-]{11})/?$`)
+	reYouTubeShortURL = regexp.MustCompile(`^/([A-Za-z0-9_-]{11})/?$`)
 )
 
 // tikTokShortDomains — поддомены, на которых код видео идёт прямо в корне пути.
@@ -276,8 +147,7 @@ func parseInstagram(p Parsed) (Parsed, error) {
 	return Parsed{}, ErrUnknownFormat
 }
 
-// parseYouTube accepts only Shorts URLs and short share links, not playlists
-// or arbitrary /watch URLs. The downloader also limits YouTube duration.
+// parseYouTube accepts individual Shorts and short share links, but not playlists.
 func parseYouTube(p Parsed) (Parsed, error) {
 	var match []string
 	if isYouTubeShortDomain(p.Hostname) {
