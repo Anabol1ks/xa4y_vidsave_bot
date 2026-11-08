@@ -22,7 +22,7 @@ services:
       context: .
       args:
         # Изменение версии инвалидирует Docker-кэш слоя с Instagram/TikTok extractors.
-        YT_DLP_VERSION: ${YT_DLP_VERSION:-2026.7.4}
+        YT_DLP_VERSION: ${YT_DLP_VERSION:-2026.10.26}
     restart: unless-stopped
     network_mode: host
     depends_on:
