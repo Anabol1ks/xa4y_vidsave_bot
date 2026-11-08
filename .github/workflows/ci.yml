@@ -1,0 +1,24 @@
+name: Validate
+
+on:
+  pull_request:
+
+jobs:
+  go:
+    name: Go tests and vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test ./...
+      - run: go vet ./...
+
+  docker:
+    name: Docker build (yt-dlp + Node.js)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag xa4yy-vidsave-ci .
