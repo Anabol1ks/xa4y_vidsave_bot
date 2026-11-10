@@ -7,13 +7,29 @@ jobs:
   go:
     name: Go tests and vet
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: vidsave_test
+          POSTGRES_USER: xa4ytest
+          POSTGRES_PASSWORD: test-only
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U xa4ytest -d vidsave_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - run: go test ./...
+      - run: go test -count=1 ./...
+        env:
+          VIDSAVE_TEST_DATABASE_URL: postgres://xa4ytest:test-only@127.0.0.1:55433/vidsave_test?sslmode=disable
       - run: go vet ./...
 
   docker:

@@ -43,14 +43,16 @@ func New(cfg *config.Config, log *zap.Logger, store *storage.Storage) (*Bot, err
 		log.Warn("Telegram privacy mode is enabled; disable it via BotFather /setprivacy to receive ordinary group messages")
 	}
 
-	return &Bot{
+	bot := &Bot{
 		api:           api,
 		cfg:           cfg,
 		log:           log,
 		sender:        NewSender(api, log),
 		store:         store,
 		downloadSlots: make(chan struct{}, maxConcurrentDownloads),
-	}, nil
+	}
+	bot.installCommandMenu()
+	return bot, nil
 }
 
 // Run запускает long-polling обработку обновлений.
@@ -110,6 +112,11 @@ func (b *Bot) handleUpdate(ctx context.Context, upd tgbotapi.Update) {
 		return
 	}
 
+	// Only direct interaction is counted; passive group messages are excluded.
+	if isPrivate || msg.IsCommand() {
+		b.trackUser(ctx, msg.From)
+	}
+
 	// Команды
 	if msg.IsCommand() {
 		b.handleCommand(chatID, msg)
@@ -134,6 +141,10 @@ func (b *Bot) handleUpdate(ctx context.Context, upd tgbotapi.Update) {
 		return
 	}
 
+	if isGroup {
+		b.trackUser(ctx, msg.From)
+	}
+
 	b.log.Info("link accepted",
 		zap.String("type", string(parsed.LinkType)),
 		zap.String("video_id", parsed.VideoID),
@@ -142,7 +153,15 @@ func (b *Bot) handleUpdate(ctx context.Context, upd tgbotapi.Update) {
 
 	switch parsed.LinkType {
 	case link.TypeInstagram, link.TypeTikTok, link.TypeYouTube:
-		b.handleDownload(ctx, chatID, replyToMessageID, parsed)
+		userID := int64(0)
+		if msg.From != nil {
+			userID = msg.From.ID
+		}
+		chatKind := "private"
+		if isGroup {
+			chatKind = "group"
+		}
+		b.handleDownload(ctx, userID, chatKind, chatID, replyToMessageID, parsed)
 	default:
 		b.sender.TextReply(chatID, replyToMessageID, "этот тип пока не поддерживаю 😕")
 	}
