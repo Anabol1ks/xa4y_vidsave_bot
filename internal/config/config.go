@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ type Config struct {
 	MaxConcurrentDownloads int
 	Proxy                  string
 	DatabaseURL            string
+	AdminTelegramIDs       map[int64]struct{}
 }
 
 func getEnv(key string, log *zap.Logger) string {
@@ -26,7 +28,29 @@ func getEnv(key string, log *zap.Logger) string {
 	panic("missing required environment variable: " + key)
 }
 
+// parseAdminTelegramIDs fails closed: unknown IDs never receive owner stats.
+func parseAdminTelegramIDs(value string) (map[int64]struct{}, error) {
+	ids := map[int64]struct{}{}
+	for _, token := range strings.Split(value, ",") {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		n, err := strconv.ParseInt(token, 10, 64)
+		if err != nil || n <= 0 {
+			return nil, fmt.Errorf("invalid ADMIN_TELEGRAM_IDS entry")
+		}
+		ids[n] = struct{}{}
+	}
+	return ids, nil
+}
+
 func Load(log *zap.Logger) *Config {
+	adminIDs, err := parseAdminTelegramIDs(os.Getenv("ADMIN_TELEGRAM_IDS"))
+	if err != nil {
+		log.Fatal("invalid admin configuration", zap.Error(err))
+	}
+
 	return &Config{
 		BotToken:               strings.TrimSpace(getEnv("BOT_TOKEN", log)),
 		AllowedHosts:           parseAllowedHosts(getEnv("ALLOWED_HOSTS", log)),
@@ -35,6 +59,7 @@ func Load(log *zap.Logger) *Config {
 		MaxConcurrentDownloads: max(1, parseInt(os.Getenv("MAX_CONCURRENT_DOWNLOADS"), 3)),
 		Proxy:                  strings.TrimSpace(os.Getenv("PROXY")),
 		DatabaseURL:            strings.TrimSpace(getEnv("DATABASE_URL", log)),
+		AdminTelegramIDs:       adminIDs,
 	}
 }
 
