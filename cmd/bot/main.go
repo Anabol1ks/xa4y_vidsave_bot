@@ -8,6 +8,7 @@ import (
 	"xa4yy_vidsave/internal/bot"
 	"xa4yy_vidsave/internal/config"
 	"xa4yy_vidsave/internal/logger"
+	"xa4yy_vidsave/internal/statshttp"
 	"xa4yy_vidsave/internal/storage"
 
 	"github.com/joho/godotenv"
@@ -38,6 +39,15 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+
+	// Accessible only on the VPS loopback interface; no public network or secrets.
+	if listen := os.Getenv("ANALYTICS_LISTEN_ADDR"); listen != "" {
+		go func() {
+			if err := statshttp.Serve(ctx, listen, store.Analytics); err != nil {
+				log.Error("local analytics HTTP server failed", zap.Error(err))
+			}
+		}()
+	}
 
 	b.Run(ctx)
 }
