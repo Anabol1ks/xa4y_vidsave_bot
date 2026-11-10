@@ -182,11 +182,18 @@ GROUP BY status ORDER BY count DESC LIMIT 6`).Scan(&a.Errors).Error
 	if err != nil {
 		return a, fmt.Errorf("error stats: %w", err)
 	}
+	// Scan aggregates into a flat struct: GORM must not attempt to treat
+	// Platforms / Errors slices in AnalyticsSnapshot as ORM relations.
+	var legacy struct {
+		CachedLinks    int64
+		LegacyCacheHit int64
+	}
 	err = d.Raw(`
 SELECT count(*) AS cached_links, COALESCE(sum(hit_count),0) AS legacy_cache_hit
-FROM media_cache WHERE deleted_at IS NULL`).Scan(&a).Error
+FROM media_cache WHERE deleted_at IS NULL`).Scan(&legacy).Error
 	if err != nil {
 		return a, fmt.Errorf("legacy cache stats: %w", err)
 	}
+	a.CachedLinks, a.LegacyCacheHit = legacy.CachedLinks, legacy.LegacyCacheHit
 	return a, nil
 }
