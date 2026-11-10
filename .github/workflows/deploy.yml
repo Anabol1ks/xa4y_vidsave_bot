@@ -22,6 +22,9 @@ jobs:
             echo "🔄 Pulling latest changes..."
             git pull origin main
 
+            # Secrets must not be readable by unprivileged local users.
+            chmod 600 .env
+
             echo "🐳 Rebuilding and restarting containers..."
             docker compose up -d --build --remove-orphans
 
