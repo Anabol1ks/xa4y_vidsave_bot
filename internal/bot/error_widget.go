@@ -22,7 +22,7 @@ type errorWidgetState struct {
 }
 
 var allowedErrorWidgetCodes = map[string]struct{}{
-	"invalid_url": {}, "unsupported_url": {}, "auth_required": {},
+	"invalid_url": {}, "unsupported_url": {}, "auth_required": {}, "photo_unavailable": {}, "too_many_photos": {}, "photo_too_large": {},
 	"private_video": {}, "source_restricted": {},
 	"source_rate_limited": {}, "download_error": {}, "network_error": {},
 	"too_large": {}, "too_long": {}, "send_error": {},

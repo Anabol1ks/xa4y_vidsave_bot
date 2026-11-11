@@ -67,6 +67,25 @@ func (s *Sender) SendWithResponse(c tgbotapi.Chattable) (*tgbotapi.Message, erro
 	return nil, errTelegramRateLimit
 }
 
+// SendPhotosGroup sends an album as one Telegram group. Rate-limit retries
+// apply only to 429; no silent retries on ambiguous transport errors (which
+// could result in duplicate albums).
+func (s *Sender) SendPhotosGroup(config tgbotapi.MediaGroupConfig) ([]tgbotapi.Message,error) {
+	api,ok:=s.api.(interface {
+		SendMediaGroup(tgbotapi.MediaGroupConfig)([]tgbotapi.Message,error)
+	})
+	if !ok {return nil,errors.New("Telegram album sending unsupported")}
+	for attempt:=1;attempt<=maxRetries;attempt++{
+		messages,err:=api.SendMediaGroup(config)
+		if err==nil{return messages,nil}
+		if !isRateLimited(err) || attempt==maxRetries {
+			return nil,err
+		}
+		s.sleep(retryAfter(err,attempt))
+	}
+	return nil,errTelegramRateLimit
+}
+
 // Text — удобная обёртка для отправки текстового сообщения.
 func (s *Sender) Text(chatID int64, text string) {
 	s.TextReply(chatID, 0, text)

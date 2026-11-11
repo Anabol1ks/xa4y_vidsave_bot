@@ -171,6 +171,26 @@ func (b *Bot) handleUpdate(ctx context.Context, upd tgbotapi.Update) {
 		b.trackUser(ctx, msg.From)
 	}
 
+	userID := int64(0)
+	if msg.From != nil {
+		userID = msg.From.ID
+	}
+	// TikTok short links may point to /photo/ instead of /video/.
+	// Resolve only trusted TikTok HTTPS redirects when photos are enabled.
+	if b.photoActive(userID) && link.IsTikTokShort(parsed) {
+		parsed = link.ResolveTikTokShort(ctx, parsed, nil)
+	}
+	chatKind := "private"
+	if isGroup { chatKind = "group" }
+	if parsed.IsPhoto {
+		if b.photoActive(userID) {
+			b.handleTikTokPhotos(ctx, userID, chatKind, chatID, replyToMessageID, parsed)
+		} else {
+			b.errorWidgetOrText(chatID, replyToMessageID, "tiktok", "unsupported_url", "📷 Скачивание TikTok-фотографий пока недоступно. Пришли ссылку на видео.", isPrivate)
+		}
+		return
+	}
+
 	b.log.Info("link accepted",
 		zap.String("type", string(parsed.LinkType)),
 		zap.String("video_id", parsed.VideoID),
@@ -179,14 +199,6 @@ func (b *Bot) handleUpdate(ctx context.Context, upd tgbotapi.Update) {
 
 	switch parsed.LinkType {
 	case link.TypeInstagram, link.TypeTikTok, link.TypeYouTube:
-		userID := int64(0)
-		if msg.From != nil {
-			userID = msg.From.ID
-		}
-		chatKind := "private"
-		if isGroup {
-			chatKind = "group"
-		}
 		b.handleDownload(ctx, userID, chatKind, chatID, replyToMessageID, parsed)
 	default:
 		b.sender.TextReply(chatID, replyToMessageID, "этот тип пока не поддерживаю 😕")

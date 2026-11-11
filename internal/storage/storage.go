@@ -37,7 +37,7 @@ func New(dsn string, log *zap.Logger) (*Storage, error) {
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
 	// AutoMigrate — создаёт/обновляет таблицу
-	if err := db.AutoMigrate(&MediaCache{}, &BotUser{}, &MediaRequest{}); err != nil {
+	if err := db.AutoMigrate(&MediaCache{}, &BotUser{}, &MediaRequest{}, &PhotoAlbumCache{}); err != nil {
 		return nil, err
 	}
 

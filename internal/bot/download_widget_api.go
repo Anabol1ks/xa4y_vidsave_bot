@@ -66,6 +66,7 @@ type downloadWidgetData struct {
 	Stage    string
 	Percent  *int
 	Revision int64
+	Photo    bool
 }
 
 func widgetStateJSON(state downloadWidgetData) (string, error) {
@@ -83,6 +84,12 @@ func widgetStateJSON(state downloadWidgetData) (string, error) {
 		return "", errors.New("invalid widget percentage")
 	}
 	data := map[string]interface{}{"v": 1, "p": state.Platform, "s": state.Stage, "n": state.Percent, "r": state.Revision}
+	if state.Photo {
+		if state.Platform != string(link.TypeTikTok) || (state.Percent != nil && state.Stage != "success") {
+			return "", errors.New("photo widget cannot carry measured byte percent")
+		}
+		data["ph"] = true
+	}
 	raw, err := json.Marshal(data)
 	if err != nil {
 		return "", err
@@ -94,7 +101,11 @@ func widgetStateJSON(state downloadWidgetData) (string, error) {
 }
 
 func (a *downloadWidgetAPI) send(ctx context.Context, chatID int64, replyID int, platform string) (int, error) {
-	payload, err := widgetStateJSON(downloadWidgetData{Platform: platform, Stage: "validating", Revision: time.Now().UnixMicro()})
+	return a.sendWithMedia(ctx, chatID, replyID, platform, false)
+}
+
+func (a *downloadWidgetAPI) sendWithMedia(ctx context.Context, chatID int64, replyID int, platform string, photo bool) (int, error) {
+	payload, err := widgetStateJSON(downloadWidgetData{Platform: platform, Stage: "validating", Revision: time.Now().UnixMicro(), Photo: photo})
 	if err != nil {
 		return 0, err
 	}
@@ -103,6 +114,12 @@ func (a *downloadWidgetAPI) send(ctx context.Context, chatID int64, replyID int,
 		"html":      {downloadWidgetHTML},
 		"chat_data": {payload},
 		"caption":   {"🎬 XA4Y · Загружаем видео"},
+	}
+	if photo {
+		v["caption"] = []string{"📷 XA4Y · Загружаем фотографии"}
+	}
+	_ = url.Values{ // placeholder removed below
+
 	}
 	if replyID > 0 {
 		reply, _ := json.Marshal(map[string]interface{}{"message_id": replyID, "allow_sending_without_reply": true})
