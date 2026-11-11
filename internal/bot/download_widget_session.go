@@ -35,18 +35,27 @@ type downloadWidgetSession struct {
 	chatID    int64
 	messageID int
 	platform  string
+	photo     bool
 	updates   chan downloadWidgetData
 	complete  chan bool
 	revision  atomic.Int64
 }
 
 func (b *Bot) beginDownloadStatus(ctx context.Context, chatKind string, chatID int64, replyID int, platform link.Type) *downloadStatus {
+	return b.beginMediaStatus(ctx, chatKind, chatID, replyID, platform, false)
+}
+
+func (b *Bot) beginPhotoStatus(ctx context.Context, chatKind string, chatID int64, replyID int) *downloadStatus {
+	return b.beginMediaStatus(ctx, chatKind, chatID, replyID, link.TypeTikTok, true)
+}
+
+func (b *Bot) beginMediaStatus(ctx context.Context, chatKind string, chatID int64, replyID int, platform link.Type, photo bool) *downloadStatus {
 	s := &downloadStatus{b: b, chatID: chatID, replyID: replyID}
 	if b.downloadWidgetActive(chatID) && chatKind == "private" && b.downloadWidgetAPI != nil {
-		messageID, err := b.downloadWidgetAPI.send(ctx, chatID, replyID, string(platform))
+		messageID, err := b.downloadWidgetAPI.sendWithMedia(ctx, chatID, replyID, string(platform), photo)
 		if err == nil {
 			w := &downloadWidgetSession{
-				b: b, chatID: chatID, messageID: messageID, platform: string(platform),
+				b: b, chatID: chatID, messageID: messageID, platform: string(platform), photo: photo,
 				updates: make(chan downloadWidgetData, 1), complete: make(chan bool, 1),
 			}
 			w.revision.Store(time.Now().UnixMicro())
@@ -117,7 +126,7 @@ func (s *downloadStatus) finish(success bool) {
 }
 
 func (w *downloadWidgetSession) push(stage string, percent *int) {
-	data := downloadWidgetData{Platform: w.platform, Stage: stage, Percent: percent, Revision: w.revision.Add(1)}
+	data := downloadWidgetData{Platform: w.platform, Stage: stage, Percent: percent, Revision: w.revision.Add(1), Photo: w.photo}
 	// Always publish latest state; never block yt-dlp pipe on Telegram networking.
 	select {
 	case w.updates <- data:
@@ -171,7 +180,7 @@ func (w *downloadWidgetSession) run() {
 		case success := <-w.complete:
 			if success && failures < 2 {
 				pct := 100
-				final := downloadWidgetData{Platform: w.platform, Stage: "success", Percent: &pct, Revision: w.revision.Add(1)}
+				final := downloadWidgetData{Platform: w.platform, Stage: "success", Percent: &pct, Revision: w.revision.Add(1), Photo: w.photo}
 				ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 				err := w.b.downloadWidgetAPI.edit(ctx, w.chatID, w.messageID, final)
 				cancel()

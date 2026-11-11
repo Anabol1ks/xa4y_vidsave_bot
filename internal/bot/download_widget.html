@@ -53,11 +53,11 @@ function draw(d){
  if(!d||d.v!==1||!names[d.p]||!stages[d.s]||typeof d.r!=='number')return;
  if(current&&d.r<current.r)return;
  current=d;
- var a=names[d.p],b=stages[d.s];
- el('platform').textContent=a[0];
+ var a=names[d.p],b=stages[d.s],photo=d.p==='tiktok'&&d.ph===true;
+ el('platform').textContent=photo?'TikTok · Фото':a[0];
  ['yt','tt','ig'].forEach(function(x){el(x).style.display=x===a[1]?'block':'none'});
- el('message').textContent=b[0];el('status').textContent=b[1];el('step').textContent=b[2];
- var known=d.s==='success'||(d.s==='downloading'&&typeof d.n==='number'&&d.n>=0&&d.n<=100);
+ el('message').textContent=photo?(d.s==='success'?'Фотографии отправлены':d.s==='sending'?'Отправляем фотографии…':d.s==='downloading'?'Скачиваем фотографии…':d.s==='preparing'?'Подготавливаем фотографии…':'Проверяем ссылку…'):b[0];el('status').textContent=b[1];el('step').textContent=b[2];
+ var known=d.s==='success'||(!photo&&d.s==='downloading'&&typeof d.n==='number'&&d.n>=0&&d.n<=100);
  var percent=d.s==='success'?100:(known?d.n:0);
  el('value').textContent=known?percent+'%':'···';el('value').className='value'+(known?'':' unknown');
  el('track').className='track'+(known?'':' loading');el('fill').style.width=known?percent+'%':'';

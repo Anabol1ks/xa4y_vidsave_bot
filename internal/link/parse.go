@@ -31,11 +31,13 @@ type Parsed struct {
 
 	LinkType Type
 	VideoID  string
+	IsPhoto  bool // TikTok image post, distinct from a video
 }
 
 var (
 	// TikTok стандартный: /@user/video/12345
 	reTikTok = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
+	reTikTokPhoto = regexp.MustCompile(`^/@([^/]+)/photo/(\d+)/?$`)
 	// TikTok короткая ссылка на www/основном домене: /t/CODE
 	reTikTokShort = regexp.MustCompile(`^/t/(\w+)/?$`)
 	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
@@ -112,6 +114,12 @@ func Parse(raw string, allowedHosts map[string]struct{}) (Parsed, error) {
 }
 
 func parseTikTok(p Parsed) (Parsed, error) {
+	if m := reTikTokPhoto.FindStringSubmatch(p.Path); len(m) == 3 {
+		p.LinkType = TypeTikTok
+		p.VideoID = m[2]
+		p.IsPhoto = true
+		return p,nil
+	}
 	// Стандартная ссылка: /@user/video/12345
 	if m := reTikTok.FindStringSubmatch(p.Path); len(m) == 3 {
 		p.LinkType = TypeTikTok
