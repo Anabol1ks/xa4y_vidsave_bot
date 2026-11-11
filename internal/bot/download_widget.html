@@ -1,0 +1,74 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}html,body{margin:0;background:#090b10;color:#f7f9fc;font-family:system-ui,-apple-system,sans-serif}
+body{padding:17px 16px 17px;max-width:100%;overflow:hidden}
+.top{display:flex;justify-content:space-between;gap:9px;align-items:center}
+.brand{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:730;min-width:0}
+.brand svg{flex:none;width:27px;height:27px}
+.brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status{color:#9da4b0;font-size:9px;text-transform:uppercase;letter-spacing:.8px;white-space:nowrap}
+.kicker{margin-top:22px;font-size:12px;color:#9ca3af;line-height:1.2}
+.big{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:2px}
+.value{font-size:48px;line-height:1.2;font-weight:790;letter-spacing:-2px;font-variant-numeric:tabular-nums}
+.value.unknown{font-size:37px;letter-spacing:-1px;color:#f6f7fa}
+.arrow{color:#419cf0;opacity:.92;flex:none}
+.track{height:9px;background:#292e37;border-radius:10px;overflow:hidden;margin-top:9px;position:relative}
+.fill{width:0;height:100%;border-radius:10px;background:linear-gradient(90deg,#226ab8,#4aabff);transition:width .35s ease}
+.track.loading .fill{width:32%;position:absolute;left:0;animation:slide 1.5s ease-in-out infinite}
+@keyframes slide{0%{transform:translateX(-105%)}100%{transform:translateX(330%)}}
+.line{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px}
+.step{font-size:11px;font-weight:650;color:#b3bac5}
+.detail{font-size:10px;color:#7e8795;text-align:right}
+.chips{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+.chip{font-size:10px;color:#98a1b0;white-space:nowrap}
+.chip strong{color:#60c797;font-weight:750}
+.chip.active{color:#e6ebf2}
+.dot{display:inline-block;width:7px;height:7px;vertical-align:middle;margin-right:5px;border-radius:100%;border:1px solid #8693a4}
+.dot.active{border-color:#55aafa;background:#55aafa;box-shadow:0 0 0 3px #24507e4a}
+.dot.done{border-color:#5dc997;background:#5dc997}
+.foot{margin-top:14px;border-top:1px solid #1e2430;padding-top:9px;font-size:9px;color:#79818d}
+@media(prefers-reduced-motion:reduce){.fill{transition:none}.track.loading .fill{animation:none;width:100%;opacity:.27}}
+</style></head><body>
+<div class="top"><div class="brand">
+<svg id="yt" viewBox="0 0 27 27" style="display:none"><rect x="1" y="5" width="25" height="17" rx="5" fill="#f0474a"/><path d="M11 9l8 4.5-8 4.5Z" fill="#fff"/></svg>
+<svg id="tt" viewBox="0 0 27 27" style="display:none"><rect width="27" height="27" rx="7" fill="#141519"/><path d="M15 4v13c0 2.5-2 4.5-4.5 4.5-3 0-4.5-1.7-4.5-4.2 0-2.9 2.3-4.8 5.6-4.8V16c-2.2-.6-3.3.6-3.3 1.8 0 1.2 1.1 2 2.2 2 1.3 0 2.1-.8 2.1-2.3V4Z" fill="#55ceda" transform="translate(-1 1)"/><path d="M15 4c.5 3.7 2.3 5.8 5.8 6.1v3.2c-2.7-.1-4.7-.9-5.8-2.3v6.2c0 3.1-2.3 5-5.3 5s-5-1.8-5-4.7c0-2.7 2.3-4.7 5.7-4.7v3.3c-1.6-.2-2.7.6-2.7 1.5 0 1.4 1 2.1 2.1 2.1 1.5 0 2.2-.9 2.2-2.4V4Z" fill="#f76d9c" transform="translate(1 0)"/></svg>
+<svg id="ig" viewBox="0 0 27 27" style="display:none"><defs><linearGradient id="grad" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#faad45"/><stop offset=".48" stop-color="#e2438f"/><stop offset="1" stop-color="#744ad7"/></linearGradient></defs><rect x="1" y="1" width="25" height="25" rx="7" fill="url(#grad)"/><rect x="6" y="6" width="15" height="15" rx="4.2" fill="none" stroke="white" stroke-width="2"/><circle cx="13.5" cy="13.5" r="3.5" fill="none" stroke="#fff" stroke-width="2"/><circle cx="19" cy="8" r="1.3" fill="#fff"/></svg>
+<span id="platform">Видео</span></div><span id="status" class="status">ПОДГОТОВКА</span></div>
+<div class="kicker" id="message">Проверяем ссылку…</div>
+<div class="big"><div class="value unknown" id="value">···</div><svg class="arrow" viewBox="0 0 36 36" width="36" height="36" aria-hidden="true"><circle cx="18" cy="18" r="14" stroke="#4a9fea" stroke-width="1.5" fill="none" opacity=".5"/><path d="M18 9v16m-6-6 6 6 6-6" stroke="#69b9ff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<div id="track" class="track loading" role="progressbar" aria-label="Загрузка"><div id="fill" class="fill"></div></div>
+<div class="line"><span id="step" class="step">Этап 1 из 4 · Проверка</span><span class="detail" id="detail">Без оценки времени</span></div>
+<div class="chips"><span class="chip" id="chip1"><i class="dot active"></i>Ссылка</span><span class="chip" id="chip2"><i class="dot"></i>Загрузка</span><span class="chip" id="chip3"><i class="dot"></i>Отправка</span></div>
+<div class="foot">XA4Y · Live Download</div>
+<script>
+(function(){
+'use strict';
+var W=window.TelegramWidget,current=null;
+var names={youtube:['YouTube Shorts','yt'],tiktok:['TikTok','tt'],instagram:['Instagram Reels','ig']};
+var stages={validating:['Проверяем ссылку…','ПРОВЕРКА','Этап 1 из 4 · Проверка'],downloading:['Скачиваем видео…','СКАЧИВАНИЕ','Этап 2 из 4 · Загрузка'],preparing:['Подготавливаем файл…','ОБРАБОТКА','Этап 3 из 4 · Подготовка'],sending:['Отправляем в Telegram…','ОТПРАВКА','Этап 4 из 4 · Отправка'],success:['Готово! Видео отправлено','ГОТОВО','Видео отправлено'],failed:['Не удалось скачать видео','ОШИБКА','Загрузка завершилась с ошибкой']};
+function el(x){return document.getElementById(x)}
+function dot(x,which){var d=el(x).firstElementChild;d.className='dot '+which;el(x).className='chip '+(which==='active'?'active':'')}
+function draw(d){
+ if(!d||d.v!==1||!names[d.p]||!stages[d.s]||typeof d.r!=='number')return;
+ if(current&&d.r<current.r)return;
+ current=d;
+ var a=names[d.p],b=stages[d.s];
+ el('platform').textContent=a[0];
+ ['yt','tt','ig'].forEach(function(x){el(x).style.display=x===a[1]?'block':'none'});
+ el('message').textContent=b[0];el('status').textContent=b[1];el('step').textContent=b[2];
+ var known=d.s==='success'||(d.s==='downloading'&&typeof d.n==='number'&&d.n>=0&&d.n<=100);
+ var percent=d.s==='success'?100:(known?d.n:0);
+ el('value').textContent=known?percent+'%':'···';el('value').className='value'+(known?'':' unknown');
+ el('track').className='track'+(known?'':' loading');el('fill').style.width=known?percent+'%':'';
+ el('track').setAttribute('aria-valuenow',known?String(percent):'');
+ el('detail').textContent=d.s==='downloading'?(known?'Текущий поток':'Размер неизвестен'):(d.s==='success'?'Успешно':'Без оценки времени');
+ var idx=['validating','downloading','preparing','sending','success'].indexOf(d.s);
+ dot('chip1',idx>0?'done':'active');
+ dot('chip2',idx>1?'done':idx===1?'active':'');
+ dot('chip3',idx===4?'done':idx>=3?'active':'');
+}
+function render(){try{if(W&&W.chatData)draw(JSON.parse(W.chatData))}catch(_e){}}
+if(W&&typeof W.onEvent==='function'){W.onEvent('chatDataChanged',render);render();if(typeof W.ready==='function')W.ready();}
+})();
+</script></body></html>

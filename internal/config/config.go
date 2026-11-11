@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 )
@@ -19,6 +20,14 @@ type Config struct {
 	DatabaseURL             string
 	AdminTelegramIDs        map[int64]struct{}
 	AnalyticsWidgetsEnabled bool
+	DownloadWidgetsEnabled bool
+	DownloadWidgetPilotIDs map[int64]struct{}
+	MaxWaitingDownloads int
+	DownloadQueueTimeout time.Duration
+	DownloadExecutionTimeout time.Duration
+	DownloadUserCooldown time.Duration
+	DownloadSourceCooldown time.Duration
+	DownloadGroupPerMinute int
 }
 
 func getEnv(key string, log *zap.Logger) string {
@@ -51,6 +60,10 @@ func Load(log *zap.Logger) *Config {
 	if err != nil {
 		log.Fatal("invalid admin configuration", zap.Error(err))
 	}
+	pilotIDs, err := parseAdminTelegramIDs(os.Getenv("DOWNLOAD_WIDGET_PILOT_IDS"))
+	if err != nil {
+		log.Fatal("invalid download pilot configuration", zap.Error(err))
+	}
 
 	return &Config{
 		BotToken:                strings.TrimSpace(getEnv("BOT_TOKEN", log)),
@@ -62,6 +75,14 @@ func Load(log *zap.Logger) *Config {
 		DatabaseURL:             strings.TrimSpace(getEnv("DATABASE_URL", log)),
 		AdminTelegramIDs:        adminIDs,
 		AnalyticsWidgetsEnabled: parseBool(os.Getenv("ANALYTICS_WIDGET_ENABLED")),
+		DownloadWidgetsEnabled: parseBool(os.Getenv("DOWNLOAD_WIDGET_ENABLED")),
+		DownloadWidgetPilotIDs: pilotIDs,
+		MaxWaitingDownloads: max(1, parseInt(os.Getenv("MAX_WAITING_DOWNLOADS"), 6)),
+		DownloadQueueTimeout: time.Duration(max(5, parseInt(os.Getenv("DOWNLOAD_QUEUE_TIMEOUT_SEC"), 20))) * time.Second,
+		DownloadExecutionTimeout: time.Duration(max(30, parseInt(os.Getenv("DOWNLOAD_TIMEOUT_SEC"), 240))) * time.Second,
+		DownloadUserCooldown: time.Duration(max(1, parseInt(os.Getenv("DOWNLOAD_USER_COOLDOWN_SEC"), 3))) * time.Second,
+		DownloadSourceCooldown: time.Duration(max(5, parseInt(os.Getenv("DOWNLOAD_SOURCE_COOLDOWN_SEC"), 30))) * time.Second,
+		DownloadGroupPerMinute: max(1, parseInt(os.Getenv("DOWNLOAD_GROUP_PER_MINUTE"), 20)),
 	}
 }
 
