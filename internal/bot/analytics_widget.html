@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+*{box-sizing:border-box}html,body{margin:0;padding:0;background:#080a0e;color:#f7f9fc;font-family:system-ui,-apple-system,sans-serif}
+body{padding:15px 14px 18px;max-width:100%;overflow:hidden}
+.header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:750;font-size:16px;letter-spacing:.4px}
+.logo{height:26px;width:26px;border:1px solid #286eab;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#101d2c;color:#329df6}
+.tag{font-size:9px;letter-spacing:1.3px;font-weight:700;color:#8b919b}
+.sub{font-size:11px;color:#8c939c;margin:5px 0 0}
+.tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;margin-top:16px;padding:4px;border-radius:13px;background:#191b21}
+.tabs button{background:transparent;border:0;border-radius:10px;min-width:0;padding:9px 1px;color:#9da4af;font-weight:700;font-size:12px;cursor:pointer}
+.tabs button[aria-pressed=true]{background:#2c94eb;color:white}
+.tabs button:disabled{opacity:.6}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:12px}
+.metric{background:#14171d;border:1px solid #222630;border-radius:13px;padding:10px 10px 9px;min-width:0}
+.metric .label{font-size:10px;color:#999faa;white-space:nowrap}
+.metric .num{font-size:29px;line-height:1.32;letter-spacing:-1px;font-weight:780;font-variant-numeric:tabular-nums;white-space:nowrap}
+.metric .num.blue{color:#379ff3}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.small{font-size:10px;color:#999faa}
+.rate{margin-top:13px}
+.rate strong{font-weight:750;font-size:16px}
+.track{margin-top:7px;height:7px;border-radius:9px;background:#262930;overflow:hidden}
+.fill{height:100%;background:#299af5;border-radius:9px;transition:width .35s ease;width:0}
+.section{margin-top:15px}
+.heading{font-size:10px;letter-spacing:.85px;color:#a9afb9;font-weight:750}
+.chart{margin-top:7px;display:flex;align-items:flex-end;gap:4px;height:69px;border-bottom:1px solid #35383f}
+.chart .bar{flex:1;min-width:0;background:linear-gradient(180deg,#3ca6ff,#175eaa);border-radius:3px 3px 0 0;transition:height .35s ease;height:1px}
+.chart .bar.zero{background:#2c3039;height:2px!important}
+.platform{margin-top:9px}
+.platform .row{font-size:11px;color:#d9dde4}
+.platform .row strong{font-weight:700;font-variant-numeric:tabular-nums}
+.platform .track{margin-top:4px;height:5px}
+.platform .fill{background:#358fea}
+.platform.tiktok .fill{background:#50d2e0}
+.platform.instagram .fill{background:#de62a9}
+.platform.youtube .fill{background:#ea6666}
+.footer{margin-top:12px;padding-top:9px;border-top:1px solid #22252c;font-size:10px;color:#9399a4}
+.note{font-size:10px;color:#8e959f;margin-top:5px;line-height:1.4}
+.err{font-size:10px;color:#ea9b9b;margin-top:6px}
+#loading{padding:16px 2px;font-size:12px;color:#a8afba}
+button:focus-visible{outline:2px solid #8acbff;outline-offset:1px}
+@media(prefers-reduced-motion:reduce){.fill,.chart .bar{transition:none}}
+</style></head><body>
+<div class="header"><div class="brand"><div class="logo"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 13l4-4 4 3 6-7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.5 5H17v4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>XA4Y</div><div class="tag">ANALYTICS</div></div>
+<div class="sub">Статистика загрузок и аудитории</div>
+<div class="tabs" id="tabs" role="group" aria-label="Период"><button data-p="24h" aria-pressed="true">24ч</button><button data-p="7d" aria-pressed="false">7д</button><button data-p="30d" aria-pressed="false">30д</button><button data-p="all" aria-pressed="false">Всё</button></div>
+<div id="loading">Загружаем статистику…</div>
+<div id="content" style="display:none">
+ <div class="grid">
+  <div class="metric"><div class="label">Пользователи</div><div class="num" id="users">—</div></div>
+  <div class="metric"><div class="label">Запросы</div><div class="num blue" id="requests">—</div></div>
+  <div class="metric"><div class="label">Успешно</div><div class="num" id="success">—</div></div>
+  <div class="metric"><div class="label">Ошибки</div><div class="num" id="errors">—</div></div>
+ </div>
+ <div class="rate"><div class="row"><span class="heading">УСПЕШНОСТЬ</span><strong id="rate">—</strong></div><div class="track"><div class="fill" id="ratebar"></div></div><div class="row" style="margin-top:6px"><span class="small" id="newusers">Новые: 0</span><span class="small" id="cache">Кэш: 0</span></div></div>
+ <div class="section"><div class="row"><span class="heading">АКТИВНОСТЬ</span><span class="small" id="chartlabel">Запросы</span></div><div class="chart" id="chart"></div><div class="row" style="margin-top:6px"><span class="small">Раньше</span><span class="small">Сейчас</span></div></div>
+ <div class="section"><div class="row"><span class="heading">ПЛАТФОРМЫ</span><span class="small">Запросы</span></div><div id="platforms"></div></div>
+ <div id="errorlines" class="err" style="display:none"></div>
+ <div id="historical" class="note" style="display:none"></div>
+ <div class="footer">По данным с запуска аналитики · <span id="notice">Данные обновлены</span></div>
+</div>
+<script>
+(function(){
+'use strict';
+var W=window.TelegramWidget, current=null, pending=false;
+var names={instagram:'Instagram Reels',tiktok:'TikTok',youtube:'YouTube Shorts'};
+var errors={auth_required:'Нужна авторизация',download_error:'Ошибка загрузки',too_large:'Слишком большой файл',too_long:'Превышена длина',unsupported:'Недоступный формат',send_error:'Ошибка отправки',internal_error:'Внутренняя ошибка'};
+function id(x){return document.getElementById(x)}
+function text(x,v){id(x).textContent=String(v)}
+function num(v){v=Number(v)||0;return String(v).replace(/\B(?=(\d{3})+(?!\d))/g,' ')}
+function valid(d){return d&&d.v===1&&['24h','7d','30d','all'].indexOf(d.p)>=0&&Array.isArray(d.b)&&Array.isArray(d.pf)&&typeof d.rev==='number'}
+function apply(d){
+ if(!valid(d))return;
+ if(current&&d.rev<current.rev)return;
+ current=d;
+ id('loading').style.display='none';id('content').style.display='block';
+ text('users',num(d.u));text('requests',num(d.r));text('success',num(d.s));text('errors',num(d.e));
+ text('rate',d.rate===null?'—':d.rate.toFixed(1)+'%');id('ratebar').style.width=d.rate===null?'0%':Math.max(0,Math.min(100,d.rate))+'%';
+ text('newusers','Новые: '+num(d.n));text('cache','Кэш: '+num(d.c));text('chartlabel','Запросы · '+d.b.length+' интервалов');
+ Array.prototype.forEach.call(id('tabs').querySelectorAll('button'),function(b){b.setAttribute('aria-pressed',b.getAttribute('data-p')===d.p?'true':'false')});
+ var chart=id('chart');chart.textContent='';var max=1;d.b.forEach(function(v){if(v>max)max=v});
+ d.b.forEach(function(v){var bar=document.createElement('div');bar.className='bar'+(v===0?' zero':'');bar.style.height=(v===0?2:Math.max(5,Math.round(100*v/max)))+'%';chart.appendChild(bar)});
+ var ps=id('platforms');ps.textContent='';var total=Number(d.r)||0;
+ d.pf.forEach(function(p){
+  if(!names[p.n])return;
+  var row=document.createElement('div');row.className='platform '+p.n;
+  var line=document.createElement('div');line.className='row';
+  var name=document.createElement('span');name.textContent=names[p.n];
+  var count=document.createElement('strong');count.textContent=num(p.r);
+  line.appendChild(name);line.appendChild(count);
+  var track=document.createElement('div');track.className='track';
+  var fill=document.createElement('div');fill.className='fill';fill.style.width=(total?100*p.r/total:0)+'%';
+  track.appendChild(fill);row.appendChild(line);row.appendChild(track);ps.appendChild(row);
+ });
+ var er=id('errorlines');er.style.display=d.er.length?'block':'none';
+ er.textContent=d.er.length?'Ошибки: '+d.er.map(function(x){return (errors[x.n]||'Другая ошибка')+' '+num(x.c)}).join(' · '):'';
+ var hist=id('historical');hist.style.display=d.p==='all'?'block':'none';if(d.p==='all')hist.textContent='Кэш за всё время: '+num(d.hist)+' уникальных ссылок (включая период до учёта пользователей; не суммируется с запросами).';
+ text('notice',d.r?'Актуальный срез':'Пока нет событий за этот период');
+}
+function setPending(value){pending=value;Array.prototype.forEach.call(id('tabs').querySelectorAll('button'),function(b){b.disabled=value})}
+function ask(period){
+ if(pending||!W||typeof W.request!=='function')return;
+ setPending(true);
+ try{
+  W.request('stats:'+period).then(function(answer){
+   if(answer&&answer.result){try{apply(JSON.parse(answer.result))}catch(_e){}}
+   setPending(false);
+  },function(){setPending(false);text('notice','Связь недоступна, открой /stats снова')});
+ }catch(_err){setPending(false)}
+}
+Array.prototype.forEach.call(id('tabs').querySelectorAll('button'),function(b){b.addEventListener('click',function(){ask(b.getAttribute('data-p'))})});
+if(W){
+ try{if(W.chatData)apply(JSON.parse(W.chatData))}catch(_e){}
+ if(typeof W.onEvent==='function')W.onEvent('chatDataChanged',function(){try{if(W.chatData)apply(JSON.parse(W.chatData))}catch(_e){}});
+ if(typeof W.ready==='function')W.ready();
+ if(current)ask(current.p);
+}else{id('loading').textContent='Открой статистику в Telegram';}
+})();
+</script></body></html>

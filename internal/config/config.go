@@ -10,14 +10,15 @@ import (
 )
 
 type Config struct {
-	BotToken               string
-	AllowedHosts           map[string]struct{}
-	InsecureSkipVerify     bool
-	MaxDownloadBytes       int64
-	MaxConcurrentDownloads int
-	Proxy                  string
-	DatabaseURL            string
-	AdminTelegramIDs       map[int64]struct{}
+	BotToken                string
+	AllowedHosts            map[string]struct{}
+	InsecureSkipVerify      bool
+	MaxDownloadBytes        int64
+	MaxConcurrentDownloads  int
+	Proxy                   string
+	DatabaseURL             string
+	AdminTelegramIDs        map[int64]struct{}
+	AnalyticsWidgetsEnabled bool
 }
 
 func getEnv(key string, log *zap.Logger) string {
@@ -52,14 +53,15 @@ func Load(log *zap.Logger) *Config {
 	}
 
 	return &Config{
-		BotToken:               strings.TrimSpace(getEnv("BOT_TOKEN", log)),
-		AllowedHosts:           parseAllowedHosts(getEnv("ALLOWED_HOSTS", log)),
-		InsecureSkipVerify:     parseBool(getEnv("INSECURE_SKIP_VERIFY", log)),
-		MaxDownloadBytes:       int64(parseInt(getEnv("MAX_DOWNLOAD_MB", log), 200)) * 1024 * 1024,
-		MaxConcurrentDownloads: max(1, parseInt(os.Getenv("MAX_CONCURRENT_DOWNLOADS"), 3)),
-		Proxy:                  strings.TrimSpace(os.Getenv("PROXY")),
-		DatabaseURL:            strings.TrimSpace(getEnv("DATABASE_URL", log)),
-		AdminTelegramIDs:       adminIDs,
+		BotToken:                strings.TrimSpace(getEnv("BOT_TOKEN", log)),
+		AllowedHosts:            parseAllowedHosts(getEnv("ALLOWED_HOSTS", log)),
+		InsecureSkipVerify:      parseBool(getEnv("INSECURE_SKIP_VERIFY", log)),
+		MaxDownloadBytes:        int64(parseInt(getEnv("MAX_DOWNLOAD_MB", log), 200)) * 1024 * 1024,
+		MaxConcurrentDownloads:  max(1, parseInt(os.Getenv("MAX_CONCURRENT_DOWNLOADS"), 3)),
+		Proxy:                   strings.TrimSpace(os.Getenv("PROXY")),
+		DatabaseURL:             strings.TrimSpace(getEnv("DATABASE_URL", log)),
+		AdminTelegramIDs:        adminIDs,
+		AnalyticsWidgetsEnabled: parseBool(os.Getenv("ANALYTICS_WIDGET_ENABLED")),
 	}
 }
 

@@ -45,3 +45,7 @@ go vet ./...
 ### Локальный отчёт через Desktop Commander
 
 На VPS доступен **только из localhost** агрегированный JSON: `curl --fail --silent --show-error http://127.0.0.1:18873/stats`. Для чтения не нужен токен Telegram, пароль от PostgreSQL или роль с доступом к сырым данным. Эндпоинт не публикуется наружу, возвращает только агрегаты (без Telegram ID). Проверка работоспособности: `curl http://127.0.0.1:18873/healthz`. Управление доступом к команде /stats в самом Telegram — отдельно, через `ADMIN_TELEGRAM_IDS`.
+
+## Telegram Analytics Widget · Stage 2
+
+Второй этап [Telegram Widgets v1](docs/WIDGETS_SPEC_V1.md): закрытая панель статистики для владельца, периоды 24ч/7д/30д/всё, график и разбивка по платформам. На production включается **только явно** через `ANALYTICS_WIDGET_ENABLED=true`; по умолчанию старый текстовый /stats и стандартный polling остаются без изменений. Команда `/stats_text` — принудительный текстовый fallback. Подробности в [docs/ANALYTICS_WIDGET_STAGE2.md](docs/ANALYTICS_WIDGET_STAGE2.md).

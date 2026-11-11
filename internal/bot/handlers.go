@@ -41,7 +41,7 @@ func (b *Bot) handleCommand(chatID int64, msg *tgbotapi.Message) {
 			),
 		)
 		b.sender.Send(reply)
-	case "stats":
+	case "stats", "stats_text":
 		if !msg.Chat.IsPrivate() {
 			return
 		}
@@ -49,15 +49,14 @@ func (b *Bot) handleCommand(chatID int64, msg *tgbotapi.Message) {
 			b.sender.Text(chatID, "🔒 статистика доступна только владельцу")
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		stats, err := b.store.Analytics(ctx)
-		if err != nil {
-			b.log.Error("analytics command failed", zap.Error(err))
-			b.sender.Text(chatID, "не удалось получить статистику 😕")
+		if msg.Command() == "stats_text" || !b.cfg.AnalyticsWidgetsEnabled {
+			b.sendTextStats(chatID)
 			return
 		}
-		b.sender.Text(chatID, formatStats(stats))
+		if err := b.sendAnalyticsWidget(chatID); err != nil {
+			b.log.Warn("sendWidget failed; falling back to text stats", zap.Error(err))
+			b.sendTextStats(chatID)
+		}
 	case "id":
 		if msg.Chat.IsPrivate() && msg.From != nil {
 			b.sender.Text(chatID, fmt.Sprintf("🪪 Твой Telegram ID: %d", msg.From.ID))
