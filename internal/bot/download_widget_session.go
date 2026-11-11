@@ -23,8 +23,11 @@ const (
 type downloadStatus struct {
 	b           *Bot
 	chatID      int64
+	replyID     int
 	textMessage *tgbotapi.Message
 	widget      *downloadWidgetSession
+	errorCode   string
+	errorText   string
 }
 
 type downloadWidgetSession struct {
@@ -38,7 +41,7 @@ type downloadWidgetSession struct {
 }
 
 func (b *Bot) beginDownloadStatus(ctx context.Context, chatKind string, chatID int64, replyID int, platform link.Type) *downloadStatus {
-	s := &downloadStatus{b: b, chatID: chatID}
+	s := &downloadStatus{b: b, chatID: chatID, replyID: replyID}
 	if b.downloadWidgetActive(chatID) && chatKind == "private" && b.downloadWidgetAPI != nil {
 		messageID, err := b.downloadWidgetAPI.send(ctx, chatID, replyID, string(platform))
 		if err == nil {
@@ -74,11 +77,34 @@ func (s *downloadStatus) progress(p download.ProgressEvent) {
 	}
 }
 
+// showError records the terminal reason without sending duplicate text when
+// an informational error card can be delivered. No retry or new download.
+func (s *downloadStatus) showError(code, fallback string) {
+	if s == nil {
+		return
+	}
+	if s.widget != nil && s.b.errorWidgetsActive(s.chatID) {
+		if _, ok := allowedErrorWidgetCodes[code]; ok {
+			s.errorCode = code
+			s.errorText = fallback
+			return
+		}
+	}
+	s.b.sender.TextReply(s.chatID, s.replyID, fallback)
+}
+
 func (s *downloadStatus) finish(success bool) {
 	if s == nil {
 		return
 	}
 	if s.widget != nil {
+		if !success && s.errorCode != "" && s.b.errorWidgetsActive(s.chatID) {
+			// Only the failed progress message is deleted. The error card stays
+			// available so the user can expand its offline format help.
+			if !s.b.sendErrorWidget(s.chatID, s.replyID, s.widget.platform, s.errorCode) {
+				s.b.sender.TextReply(s.chatID, s.replyID, s.errorText)
+			}
+		}
 		select {
 		case s.widget.complete <- success:
 		default:
