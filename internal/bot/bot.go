@@ -58,10 +58,17 @@ func New(cfg *config.Config, log *zap.Logger, store *storage.Storage) (*Bot, err
 // Run запускает long-polling обработку обновлений.
 // Блокирует до отмены ctx.
 func (b *Bot) Run(ctx context.Context) {
+	if b.cfg.AnalyticsWidgetsEnabled {
+		// Exactly one long-poll session: the widget-aware decoder replaces
+		// the legacy library's GetUpdatesChan while this feature is enabled.
+		b.pollUpdates(ctx)
+		b.log.Info("shutting down gracefully")
+		return
+	}
+	// Feature disabled (default): preserve the unchanged production polling path.
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 30
 	updates := b.api.GetUpdatesChan(u)
-
 	b.log.Info("bot started, waiting for updates...")
 	for {
 		select {
