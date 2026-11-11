@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,6 +18,8 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"go.uber.org/zap"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type fakeVideoSender struct {
@@ -63,7 +66,31 @@ func TestDownloadWidgetEndToEndPostgres(t *testing.T) {
 	if dsn == "" {
 		t.Skip("requires disposable PostgreSQL database")
 	}
-	store, err := storage.New(dsn, zap.NewNop())
+	// Go packages are tested in parallel by CI against the same disposable
+	// PostgreSQL database. A private schema prevents this E2E fixture from
+	// corrupting aggregate counts in the storage package's independent tests.
+	parsedDSN, err := url.Parse(dsn)
+	if err != nil || !strings.Contains(parsedDSN.Path, "test") {
+		t.Fatal("refusing to create integration fixture outside a test database")
+	}
+	schema := "vidsave_stage3_" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	rootDB, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlDB, err := rootDB.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	if err := rootDB.Exec("CREATE SCHEMA " + schema).Error; err != nil {
+		t.Fatal(err)
+	}
+	defer rootDB.Exec("DROP SCHEMA " + schema + " CASCADE")
+	q := parsedDSN.Query()
+	q.Set("search_path", schema)
+	parsedDSN.RawQuery = q.Encode()
+	store, err := storage.New(parsedDSN.String(), zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
