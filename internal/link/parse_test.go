@@ -82,3 +82,25 @@ func TestExistingPlatformsParse(t *testing.T) {
 		}
 	}
 }
+
+func TestTikTokPhotoPostsAreNotVideos(t *testing.T) {
+	for _, raw := range []string{
+		"https://www.tiktok.com/@isisusisp/photo/7706556456627096852?_r=1",
+		"https://m.tiktok.com/@user/photo/7706556456627096852/",
+	} {
+		if _, err := Parse(raw, nil); !errors.Is(err, ErrTikTokPhotoPost) {
+			t.Fatalf("TikTok photo post %s classified as %v", raw, err)
+		}
+	}
+	// A vt.tiktok.com short link is accepted first; its redirect is discovered
+	// by yt-dlp, which yields the precise photo-post error instead.
+	p, err := Parse("https://vt.tiktok.com/ZSpaTVxRj/", nil)
+	if err != nil || p.LinkType != TypeTikTok || p.VideoID != "ZSpaTVxRj" {
+		t.Fatalf("short link rejected: parsed=%+v err=%v", p, err)
+	}
+	// Regular TikTok videos retain the exact original behavior.
+	p, err = Parse("https://www.tiktok.com/@user/video/7706556456627096852", nil)
+	if err != nil || p.LinkType != TypeTikTok || p.VideoID != "7706556456627096852" {
+		t.Fatalf("regular video broken: parsed=%+v err=%v", p, err)
+	}
+}

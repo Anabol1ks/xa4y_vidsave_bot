@@ -33,7 +33,7 @@ func TestErrorWidgetHtmlAndOfflineButton(t *testing.T) {
 	if buffer.Len() > 4096 {
 		t.Fatalf("compressed HTML length %d", buffer.Len())
 	}
-	for _, s := range []string{"Поддерживаемые форматы", "Instagram Reels", "TikTok", "YouTube Shorts", "aria-expanded", "addEventListener('click'", "chatDataChanged", "source_rate_limited", "auth_required", "too_large", "send_error", "busy", "download_error", "invalid_url"} {
+	for _, s := range []string{"Поддерживаемые форматы", "Instagram Reels", "TikTok", "YouTube Shorts", "aria-expanded", "addEventListener('click'", "chatDataChanged", "photo_post", "Это фотографии TikTok", "source_rate_limited", "auth_required", "too_large", "send_error", "busy", "download_error", "invalid_url"} {
 		if !strings.Contains(errorWidgetHTML, s) {
 			t.Fatalf("missing static content: %s", s)
 		}

@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	ErrNotURL         = errors.New("not a valid url")
-	ErrNotAllowedHost = errors.New("host not allowed")
-	ErrUnknownFormat  = errors.New("unknown link format")
+	ErrNotURL          = errors.New("not a valid url")
+	ErrNotAllowedHost  = errors.New("host not allowed")
+	ErrUnknownFormat   = errors.New("unknown link format")
+	ErrTikTokPhotoPost = errors.New("tiktok photo post is not a video")
 )
 
 type Type string
@@ -35,7 +36,8 @@ type Parsed struct {
 
 var (
 	// TikTok стандартный: /@user/video/12345
-	reTikTok = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
+	reTikTok      = regexp.MustCompile(`^/@([^/]+)/video/(\d+)/?$`)
+	reTikTokPhoto = regexp.MustCompile(`^/@([^/]+)/photo/(\d+)/?$`)
 	// TikTok короткая ссылка на www/основном домене: /t/CODE
 	reTikTokShort = regexp.MustCompile(`^/t/(\w+)/?$`)
 	// TikTok короткая ссылка на vm/vt поддоменах: /CODE
@@ -112,6 +114,11 @@ func Parse(raw string, allowedHosts map[string]struct{}) (Parsed, error) {
 }
 
 func parseTikTok(p Parsed) (Parsed, error) {
+	// A TikTok photo carousel is a distinct media type, not a video. Return
+	// a precise error instead of silently classifying it as a broken URL.
+	if reTikTokPhoto.MatchString(p.Path) {
+		return Parsed{}, ErrTikTokPhotoPost
+	}
 	// Стандартная ссылка: /@user/video/12345
 	if m := reTikTok.FindStringSubmatch(p.Path); len(m) == 3 {
 		p.LinkType = TypeTikTok

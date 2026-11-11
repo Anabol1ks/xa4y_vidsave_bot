@@ -18,14 +18,19 @@ func TestClassifyYtDlpError(t *testing.T) {
 			want:   ErrYtDlpAuth,
 		},
 		{
-			name:   "unsupported url",
-			stderr: "ERROR: Unsupported URL: https://www.tiktok.com/@user/photo/123",
-			want:   ErrYtDlpUnsupported,
+			name:   "legitimate TikTok photo post via short link",
+			stderr: "ERROR: Unsupported URL: https://www.tiktok.com/@isisusisp/photo/7706556456627096852?_r=1&_t=ZS-9BJf3g2UpbY",
+			want:   ErrTikTokPhotoPost,
 		},
 		{
 			name:   "youtube anti-bot challenge",
 			stderr: "ERROR: [youtube] Sign in to confirm you\u0027re not a bot.",
 			want:   ErrYtDlpAuth,
+		},
+		{
+			name:   "unrelated unsupported URL",
+			stderr: "ERROR: Unsupported URL: https://www.tiktok.com/@user/music/123",
+			want:   ErrYtDlpUnsupported,
 		},
 		{
 			name:   "generic error",

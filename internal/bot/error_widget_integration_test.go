@@ -60,6 +60,7 @@ func TestErrorWidgetEndToEndPostgres(t *testing.T) {
 last=""
 for x in "$@"; do last="$x"; done
 case "$last" in
+ *vt.tiktok.com*) echo "ERROR: Unsupported URL: https://www.tiktok.com/@isisusisp/photo/7706556456627096852" >&2 ;;
  *instagram*) echo "ERROR: This account is private" >&2 ;;
  *tiktok*) echo "ERROR: HTTP Error 429: Too Many Requests" >&2 ;;
  *youtube*) echo "ERROR: socket timed out" >&2 ;;
@@ -98,6 +99,7 @@ exit 1
 		{link.TypeInstagram, "https://www.instagram.com/reel/abc", "private_video"},
 		{link.TypeTikTok, "https://www.tiktok.com/@user/video/12", "source_rate_limited"},
 		{link.TypeYouTube, "https://www.youtube.com/shorts/abc", "network_error"},
+		{link.TypeTikTok, "https://vt.tiktok.com/ZSpaTVxRj/", "photo_post"},
 	}
 	baseID := time.Now().UnixNano()
 	for i, tc := range testCases {
@@ -108,8 +110,8 @@ exit 1
 	}
 	// Two widgets per failed download: transient progress + durable error card.
 	sends := fake.callsFor("sendWidget")
-	if len(sends) != 6 {
-		t.Fatalf("expected 6 sends, got %d", len(sends))
+	if len(sends) != 8 {
+		t.Fatalf("expected 8 sends, got %d", len(sends))
 	}
 	for i, tc := range testCases {
 		var progress map[string]interface{}
@@ -135,7 +137,7 @@ exit 1
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Requests != 3 || report.Success != 0 || report.Failed != 3 {
+	if report.Requests != 4 || report.Success != 0 || report.Failed != 4 {
 		t.Fatalf("events must not double-count widget notifications: %+v", report)
 	}
 }

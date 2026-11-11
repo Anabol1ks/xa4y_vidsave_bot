@@ -95,6 +95,8 @@ func (b *Bot) handleParseError(chatID int64, text string, err error) {
 		}
 	case link.ErrNotAllowedHost:
 		b.errorWidgetOrText(chatID, 0, "generic", "unsupported_url", "такой домен не поддерживаю 😕\n\nпока умею TikTok, Instagram и YouTube Shorts"+errorContact, true)
+	case link.ErrTikTokPhotoPost:
+		b.errorWidgetOrText(chatID, 0, "tiktok", "photo_post", "Это фотопубликация TikTok, а не видео 📸\nСейчас поддерживаются TikTok-видео и другие указанные форматы.", true)
 	case link.ErrUnknownFormat:
 		b.errorWidgetOrText(chatID, 0, "generic", "invalid_url", "не могу разобрать ссылку 🤔\nкинь прямую ссылку на видео"+errorContact, true)
 	default:
@@ -220,6 +222,9 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 		case errors.Is(err, download.ErrVideoTooLong):
 			status = "too_long"
 			progress.showError("too_long", "YouTube Shorts должен быть не длиннее 3 минут 😕")
+		case errors.Is(err, download.ErrTikTokPhotoPost):
+			status = "photo_post"
+			progress.showError("photo_post", "Это фотопубликация TikTok, а не видео 📸\nСейчас поддерживаются TikTok-видео и другие указанные форматы.")
 		case errors.Is(err, download.ErrYtDlpUnsupported):
 			status = "unsupported"
 			progress.showError("unsupported_url", "эта ссылка ведёт не на видео или yt-dlp не умеет её скачивать 😕\nпопробуй другую ссылку" + errorContact)

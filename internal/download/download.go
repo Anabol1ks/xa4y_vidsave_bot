@@ -21,6 +21,7 @@ var (
 	ErrYtDlp            = errors.New("yt-dlp error")
 	ErrYtDlpAuth        = errors.New("yt-dlp authentication required")
 	ErrYtDlpUnsupported = errors.New("yt-dlp unsupported url")
+	ErrTikTokPhotoPost  = errors.New("tiktok photo post is not a video")
 	ErrYtDlpPrivate     = errors.New("yt-dlp private video")
 	ErrYtDlpRateLimited = errors.New("yt-dlp source rate limited")
 	ErrYtDlpNetwork     = errors.New("yt-dlp network failure")
@@ -220,6 +221,11 @@ func classifyYtDlpError(stderr string) error {
 		return ErrYtDlpAuth
 	case strings.Contains(lower, "http error 429"), strings.Contains(lower, "too many requests"), strings.Contains(lower, "rate limit reached"), strings.Contains(lower, "rate-limit reached"), strings.Contains(lower, "rate limited"):
 		return ErrYtDlpRateLimited
+	case strings.Contains(lower, "unsupported url") &&
+		strings.Contains(lower, "tiktok.com/") && strings.Contains(lower, "/photo/"):
+		// Short links (vt.tiktok.com/...) resolve inside yt-dlp to /photo/.
+		// They are legitimate photo posts, but not downloadable videos.
+		return ErrTikTokPhotoPost
 	case strings.Contains(lower, "unsupported url"):
 		return ErrYtDlpUnsupported
 	case strings.Contains(lower, "timed out"), strings.Contains(lower, "connection reset"), strings.Contains(lower, "connection refused"), strings.Contains(lower, "network is unreachable"), strings.Contains(lower, "temporary failure in name resolution"):
