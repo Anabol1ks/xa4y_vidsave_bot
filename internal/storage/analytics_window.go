@@ -28,20 +28,23 @@ func ParseAnalyticsPeriod(value string) (AnalyticsPeriod, bool) {
 
 // WidgetAnalytics is an aggregate-only DTO, with no user IDs or individual events.
 type WidgetAnalytics struct {
-	Version     int              `json:"v"`
-	Period      AnalyticsPeriod  `json:"p"`
-	Revision    int64            `json:"rev"`
-	Users       int64            `json:"u"`
-	NewUsers    int64            `json:"n"`
-	Requests    int64            `json:"r"`
-	Success     int64            `json:"s"`
-	Errors      int64            `json:"e"`
-	CacheHits   int64            `json:"c"`
-	SuccessRate *float64         `json:"rate"`
-	Historical  int64            `json:"hist,omitempty"`
-	Platforms   []WindowPlatform `json:"pf"`
-	ErrorCodes  []WindowError    `json:"er"`
-	Buckets     []int64          `json:"b"`
+	Version        int                   `json:"v"`
+	Period         AnalyticsPeriod       `json:"p"`
+	Revision       int64                 `json:"rev"`
+	Users          int64                 `json:"u"`
+	NewUsers       int64                 `json:"n"`
+	Requests       int64                 `json:"r"`
+	Success        int64                 `json:"s"`
+	Errors         int64                 `json:"e"`
+	CacheHits      int64                 `json:"c"`
+	SuccessRate    *float64              `json:"rate"`
+	Historical     int64                 `json:"hist,omitempty"`
+	Videos         int64                 `json:"vid"` // unique source links in the historical cache, including pre-analytics
+	VideoPlatforms []WindowVideoPlatform `json:"vp"`
+	VideoBuckets   []int64               `json:"vb"`
+	Platforms      []WindowPlatform      `json:"pf"`
+	ErrorCodes     []WindowError         `json:"er"`
+	Buckets        []int64               `json:"b"`
 }
 
 type WindowPlatform struct {
@@ -52,6 +55,13 @@ type WindowPlatform struct {
 
 type WindowError struct {
 	Code  string `json:"n"`
+	Count int64  `json:"c"`
+}
+
+// The cache predates analytics: one row represents one unique source link.
+// These counts are NOT successful requests, downloads or distinct files by SHA.
+type WindowVideoPlatform struct {
+	Name  string `json:"n"`
 	Count int64  `json:"c"`
 }
 
@@ -66,8 +76,9 @@ func (s *Storage) analyticsWindowAt(ctx context.Context, period AnalyticsPeriod,
 	now = now.UTC()
 	out := WidgetAnalytics{
 		Version: 1, Period: period, Revision: now.UnixMicro(),
-		Platforms:  []WindowPlatform{{Name: "instagram"}, {Name: "tiktok"}, {Name: "youtube"}},
-		ErrorCodes: []WindowError{},
+		Platforms:      []WindowPlatform{{Name: "instagram"}, {Name: "tiktok"}, {Name: "youtube"}},
+		ErrorCodes:     []WindowError{},
+		VideoPlatforms: []WindowVideoPlatform{{Name: "instagram"}, {Name: "tiktok"}, {Name: "youtube"}},
 	}
 	start := now
 	switch period {
@@ -194,9 +205,67 @@ GROUP BY idx ORDER BY idx`, n-1, start, span, start, now).Scan(&bucketCounts).Er
 			out.Buckets[point.Idx] = point.Count
 		}
 	}
+	// Historical video links existed long before bot_users and media_requests.
+	// Compute them independently, over the FULL lifetime when period=all.
+	videoStart := start
 	if period == PeriodAll {
-		if err := db.Raw("SELECT COUNT(*) FROM media_cache WHERE deleted_at IS NULL").Scan(&out.Historical).Error; err != nil {
-			return out, fmt.Errorf("historical cache count: %w", err)
+		var earliest struct{ Start *time.Time }
+		if err := db.Raw("SELECT MIN(created_at) AS start FROM media_cache WHERE deleted_at IS NULL AND created_at <= ?", now).Scan(&earliest).Error; err != nil {
+			return out, fmt.Errorf("historical cache start: %w", err)
+		}
+		if earliest.Start != nil {
+			videoStart = *earliest.Start
+		} else {
+			videoStart = now.Add(-time.Hour)
+		}
+	}
+	var videoCount struct{ Count int64 }
+	if err := db.Raw("SELECT COUNT(*) AS count FROM media_cache WHERE deleted_at IS NULL AND created_at >= ? AND created_at <= ?", videoStart, now).Scan(&videoCount).Error; err != nil {
+		return out, fmt.Errorf("historical video count: %w", err)
+	}
+	out.Videos = videoCount.Count
+	if period == PeriodAll {
+		out.Historical = out.Videos // backwards-compatible alias for existing widgets
+	}
+	type videoPlatformCount struct {
+		Platform string
+		Count    int64
+	}
+	var videoPlatforms []videoPlatformCount
+	if err := db.Raw(`
+SELECT split_part(source_key, ':', 1) AS platform, COUNT(*) AS count
+FROM media_cache
+WHERE deleted_at IS NULL AND created_at >= ? AND created_at <= ?
+GROUP BY platform`, videoStart, now).Scan(&videoPlatforms).Error; err != nil {
+		return out, fmt.Errorf("historical video platforms: %w", err)
+	}
+	for _, p := range videoPlatforms {
+		for i := range out.VideoPlatforms {
+			if out.VideoPlatforms[i].Name == p.Platform {
+				out.VideoPlatforms[i].Count = p.Count
+			}
+		}
+	}
+	out.VideoBuckets = make([]int64, n)
+	videoSpan := now.Sub(videoStart).Seconds() / float64(n)
+	if videoSpan < 1 {
+		videoSpan = 1
+	}
+	var videoBucketCounts []struct {
+		Idx   int
+		Count int64
+	}
+	if err := db.Raw(`
+SELECT LEAST(?, GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (created_at - ?)) / ?)::int)) AS idx,
+ COUNT(*) AS count
+FROM media_cache
+WHERE deleted_at IS NULL AND created_at >= ? AND created_at <= ?
+GROUP BY idx ORDER BY idx`, n-1, videoStart, videoSpan, videoStart, now).Scan(&videoBucketCounts).Error; err != nil {
+		return out, fmt.Errorf("historical video timeline: %w", err)
+	}
+	for _, bucket := range videoBucketCounts {
+		if bucket.Idx >= 0 && bucket.Idx < n {
+			out.VideoBuckets[bucket.Idx] = bucket.Count
 		}
 	}
 	return out, nil

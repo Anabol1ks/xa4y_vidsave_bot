@@ -70,8 +70,14 @@ func TestAnalyticsWidgetPayload(t *testing.T) {
 	rate := 87.5
 	report := storage.WidgetAnalytics{
 		Version: 1, Period: storage.Period7d, Revision: 1234, Users: 3, NewUsers: 2, Requests: 8, Success: 7, Errors: 1, CacheHits: 4, SuccessRate: &rate,
-		Platforms:  []storage.WindowPlatform{{Name: "youtube", Requests: 5, Success: 5}},
-		ErrorCodes: []storage.WindowError{{Code: "auth_required", Count: 1}}, Buckets: []int64{1, 1, 2, 3, 1, 0, 0},
+		Videos: 440, VideoPlatforms: []storage.WindowVideoPlatform{
+			{Name: "youtube", Count: 20},
+			{Name: "instagram", Count: 200},
+			{Name: "tiktok", Count: 220},
+		},
+		VideoBuckets: []int64{14, 14, 22, 23, 40, 120, 207},
+		Platforms:    []storage.WindowPlatform{{Name: "youtube", Requests: 5, Success: 5}},
+		ErrorCodes:   []storage.WindowError{{Code: "auth_required", Count: 1}}, Buckets: []int64{1, 1, 2, 3, 1, 0, 0},
 	}
 	s, err := marshalWidgetAnalytics(report)
 	if err != nil {
@@ -84,7 +90,7 @@ func TestAnalyticsWidgetPayload(t *testing.T) {
 	if err := json.Unmarshal([]byte(s), &output); err != nil {
 		t.Fatal(err)
 	}
-	if output.Users != 3 || output.Success != 7 || output.Period != "7d" {
+	if output.Users != 3 || output.Success != 7 || output.Period != "7d" || output.Videos != 440 || len(output.VideoPlatforms) != 3 {
 		t.Fatal(output)
 	}
 	if strings.Contains(s, "telegram_user_id") {
@@ -108,7 +114,7 @@ func TestAnalyticsWidgetHTMLLimits(t *testing.T) {
 	if compressed.Len() > 4096 {
 		t.Fatalf("zlib level 9 length %d exceeds 4096 bytes", compressed.Len())
 	}
-	for _, needle := range []string{"W.request", "chatDataChanged", "data-p=\"24h\"", "data-p=\"7d\"", "data-p=\"30d\"", "data-p=\"all\"", "prefers-reduced-motion"} {
+	for _, needle := range []string{"W.request", "chatDataChanged", "data-p=\"24h\"", "data-p=\"7d\"", "data-p=\"30d\"", "data-p=\"all\"", "prefers-reduced-motion", "Видео за всё время", "d.vp||d.pf", "d.vb||d.b"} {
 		if !strings.Contains(analyticsWidgetHTML, needle) {
 			t.Errorf("missing %s", needle)
 		}
