@@ -1,0 +1,73 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}html,body{margin:0;background:#090b10;color:#f7f9fc;font-family:system-ui,-apple-system,sans-serif}
+body{padding:17px 16px 18px;max-width:100%;overflow:hidden}
+.top,.row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.brand{display:flex;align-items:center;gap:9px;min-width:0;font-size:15px;font-weight:740}
+.brand svg{width:26px;height:26px;flex:none}.brand span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tag{font-size:9px;color:#e77b83;font-weight:740;letter-spacing:1px}
+.kicker{font-size:10px;color:#d78b90;letter-spacing:.8px;font-weight:750;margin-top:22px}
+.title{font-size:23px;line-height:1.18;letter-spacing:-.7px;font-weight:800;margin-top:7px}
+.info{font-size:12px;line-height:1.52;color:#a9b0bc;margin-top:10px}
+.divider{height:1px;background:#242833;margin-top:17px}
+.button{width:100%;border:1px solid #365d83;border-radius:12px;margin-top:12px;padding:11px 12px;background:#15202e;color:#9ccdff;font-size:12px;font-weight:740;cursor:pointer;text-align:left}
+.button:focus-visible{outline:2px solid #a4d6ff;outline-offset:2px}
+.chevron{float:right;opacity:.8}
+.formats{display:none;margin-top:10px;padding:11px 12px;border-radius:11px;background:#15191f;color:#c4ccd6;font-size:11px;line-height:1.7}
+.formats b{color:#f0f3f8}
+.foot{margin-top:13px;font-size:10px;color:#727e8d}
+</style></head><body>
+<div class="top"><div class="brand">
+<svg id="yt" viewBox="0 0 27 27" style="display:none"><rect x="1" y="5" width="25" height="17" rx="5" fill="#f0474a"/><path d="M11 9l8 4.5-8 4.5Z" fill="#fff"/></svg>
+<svg id="tt" viewBox="0 0 27 27" style="display:none"><rect width="27" height="27" rx="7" fill="#15161b"/><path d="M14 3v14c0 2.9-1.8 4.8-4.5 4.8-2.6 0-4.5-1.8-4.5-4.3 0-3 2.1-5 5.4-5v3.2c-1.5-.3-2.4.4-2.4 1.7 0 1 .8 1.7 1.7 1.7 1.1 0 1.8-.7 1.8-2.1V3Z" fill="#63dce2"/><path d="M14 3c1 4.5 2.5 6 6 6.2v3.2c-2.3-.1-4.5-.7-6-2.1" fill="none" stroke="#ef6b9f" stroke-width="2"/></svg>
+<svg id="ig" viewBox="0 0 27 27" style="display:none"><defs><linearGradient id="g" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#fbb24e"/><stop offset=".5" stop-color="#e3448e"/><stop offset="1" stop-color="#714bd9"/></linearGradient></defs><rect x="1" y="1" width="25" height="25" rx="7" fill="url(#g)"/><rect x="6" y="6" width="15" height="15" rx="4" fill="none" stroke="#fff" stroke-width="2"/><circle cx="13.5" cy="13.5" r="3.6" fill="none" stroke="#fff" stroke-width="2"/><circle cx="19" cy="8" r="1.3" fill="#fff"/></svg>
+<svg id="generic" viewBox="0 0 27 27" style="display:none"><rect width="27" height="27" rx="8" fill="#1a293d"/><path d="M13.5 6v8m0 5v1" stroke="#75b9fa" stroke-width="2.4" stroke-linecap="round"/><circle cx="13.5" cy="13.5" r="10" stroke="#75b9fa" stroke-width="1.5" fill="none"/></svg>
+<span id="platform">XA4Y</span></div><span class="tag">ОШИБКА</span></div>
+<div class="kicker">НЕ УДАЛОСЬ ОБРАБОТАТЬ ССЫЛКУ</div>
+<div class="title" id="title">Видео недоступно</div>
+<div class="info" id="info">Отправь другую публичную ссылку, когда будет удобно.</div>
+<div class="divider"></div>
+<button class="button" id="toggle" type="button" aria-expanded="false" aria-controls="formats">Поддерживаемые форматы <span class="chevron">⌄</span></button>
+<div id="formats" class="formats">
+<b>Instagram Reels</b> · instagram.com/reel/…
+<div><b>TikTok</b> · tiktok.com/@user/video/…</div>
+<div><b>YouTube Shorts</b> · youtube.com/shorts/…</div>
+<div style="margin-top:6px;color:#8994a2">Пришли прямую ссылку на публичное видео в чат.</div>
+</div>
+<div class="foot">XA4Y · Video Assistant</div>
+<script>
+(function(){
+'use strict';
+var W=window.TelegramWidget, names={youtube:['YouTube Shorts','yt'],tiktok:['TikTok','tt'],instagram:['Instagram Reels','ig'],generic:['XA4Y','generic']};
+var reasons={
+invalid_url:['Ссылка не распознана','Проверь ссылку: нужна прямая ссылка на видео.'],
+unsupported_url:['Неподдерживаемая ссылка','Поддерживаются Reels, TikTok-видео и YouTube Shorts.'],
+auth_required:['Видео недоступно','Возможно, требуется вход в аккаунт или видео закрыто.'],
+private_video:['Видео закрыто','Владелец ограничил доступ к этому видео.'],
+source_restricted:['Доступ ограничен','Платформа временно ограничила доступ к ролику.'],
+source_rate_limited:['Доступ ограничен','Платформа временно ограничила скачивание.'],
+download_error:['Не удалось скачать видео','Платформа или сеть сейчас не позволяет получить файл.'],
+network_error:['Ошибка соединения','Не удалось получить видео из-за проблем с сетью.'],
+too_large:['Видео слишком большое','Максимальный размер для отправки этим ботом — 50 МиБ.'],
+too_long:['Видео слишком длинное','YouTube Shorts: поддерживаются ролики до 3 минут.'],
+send_error:['Не удалось отправить видео','Telegram не подтвердил отправку файла.'],
+busy:['Слишком много запросов','Дождись завершения текущей загрузки.'],
+limit_reached:['Лимит запросов','Дождись завершения текущей загрузки.'],
+internal_error:['Не удалось обработать видео','Возникла внутренняя ошибка. Попробуй другую публичную ссылку позже.']
+};
+function get(x){return document.getElementById(x)}
+function render(){
+try{
+var d=JSON.parse(W.chatData||'{}');if(d.v!==1||!names[d.p]||!reasons[d.e])return;
+var n=names[d.p],r=reasons[d.e];get('platform').textContent=n[0];get('title').textContent=r[0];get('info').textContent=r[1];
+['yt','tt','ig','generic'].forEach(function(x){get(x).style.display=x===n[1]?'block':'none'});
+}catch(_e){}
+}
+get('toggle').addEventListener('click',function(){
+var open=get('toggle').getAttribute('aria-expanded')!=='true';
+get('toggle').setAttribute('aria-expanded',open?'true':'false');
+get('formats').style.display=open?'block':'none';
+});
+if(W){if(typeof W.onEvent==='function')W.onEvent('chatDataChanged',render);render();if(typeof W.ready==='function')W.ready();}
+})();
+</script></body></html>

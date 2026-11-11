@@ -78,15 +78,25 @@ func (b *Bot) handleCommand(chatID int64, msg *tgbotapi.Message) {
 // --- Ошибки парсинга ---
 
 func (b *Bot) handleParseError(chatID int64, text string, err error) {
-	b.log.Info("link rejected", zap.Error(err), zap.String("text", text))
+	b.log.Info("link rejected", zap.Error(err))
+	if b.errorWidgetsActive(chatID) && b.downloadGate != nil &&
+		(strings.Contains(text, "://") || strings.HasPrefix(strings.ToLower(text), "www.")) {
+		if !b.downloadGate.shouldNotify(chatID) {
+			return // avoid widget spam on repeated invalid URL messages
+		}
+	}
 
 	switch err {
 	case link.ErrNotURL:
-		b.sender.Text(chatID, "это не похоже на ссылку 🧐")
+		if strings.Contains(text, "://") || strings.HasPrefix(strings.ToLower(text), "www.") {
+			b.errorWidgetOrText(chatID, 0, "generic", "invalid_url", "это не похоже на ссылку 🧐", true)
+		} else {
+			b.sender.Text(chatID, "это не похоже на ссылку 🧐")
+		}
 	case link.ErrNotAllowedHost:
-		b.sender.Text(chatID, "такой домен не поддерживаю 😕\n\nпока умею TikTok, Instagram и YouTube Shorts"+errorContact)
+		b.errorWidgetOrText(chatID, 0, "generic", "unsupported_url", "такой домен не поддерживаю 😕\n\nпока умею TikTok, Instagram и YouTube Shorts"+errorContact, true)
 	case link.ErrUnknownFormat:
-		b.sender.Text(chatID, "не могу разобрать ссылку 🤔\nкинь прямую ссылку на видео"+errorContact)
+		b.errorWidgetOrText(chatID, 0, "generic", "invalid_url", "не могу разобрать ссылку 🤔\nкинь прямую ссылку на видео"+errorContact, true)
 	default:
 		b.sender.Text(chatID, "что-то пошло не так: "+err.Error()+errorContact)
 	}
@@ -126,16 +136,12 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 		if err != nil {
 			status = "busy"
 			if b.downloadGate.shouldNotify(chatID) {
-				b.sender.TextReply(chatID, replyToMessageID, "⏳ Слишком много запросов. Дождись завершения текущего видео или отправь ссылку позже.")
+				b.errorWidgetOrText(chatID, replyToMessageID, string(parsed.LinkType), "busy", "⏳ Слишком много запросов. Дождись завершения текущего видео или отправь ссылку позже.", chatKind=="private")
 			}
 			return
 		}
 		defer release()
 	}
-	replyText := func(text string) {
-		b.sender.TextReply(chatID, replyToMessageID, text)
-	}
-
 	// 1. Проверяем кэш по source_key
 	cached, err := b.store.Lookup(sourceKey)
 	if err == nil {
@@ -154,7 +160,7 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 		if err := b.sender.Send(video); err != nil {
 			status = "send_error"
 			b.log.Error("failed to send cached video", zap.Error(err))
-			replyText("не удалось отправить видео 😢")
+			b.errorWidgetOrText(chatID, replyToMessageID, string(parsed.LinkType), "send_error", "не удалось отправить видео 😢", chatKind=="private")
 		} else {
 			status = "success"
 		}
@@ -169,7 +175,7 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 		if err!=nil {
 			status="busy"
 			if b.downloadGate.shouldNotify(chatID) {
-				replyText("⏳ Все слоты заняты. Попробуй отправить другую ссылку позже.")
+				b.errorWidgetOrText(chatID, replyToMessageID, string(parsed.LinkType), "busy", "⏳ Все слоты заняты. Попробуй отправить другую ссылку позже.", chatKind=="private")
 			}
 			return
 		}
@@ -197,20 +203,29 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 		case errors.Is(err, ErrDownloadBusy):
 			status = "busy"
 			if b.downloadGate.shouldNotify(chatID) {
-				replyText("⏳ Сейчас все загрузки заняты. Отправь ссылку чуть позже.")
+				progress.showError("busy","⏳ Сейчас все загрузки заняты. Отправь ссылку чуть позже.")
 			}
+		case errors.Is(err, download.ErrYtDlpPrivate):
+			status = "private_video"
+			progress.showError("private_video", "это видео закрыто настройками приватности 😕\nпопробуй другую публичную ссылку" + errorContact)
+		case errors.Is(err, download.ErrYtDlpRateLimited):
+			status = "source_rate_limited"
+			progress.showError("source_rate_limited", "платформа временно ограничила доступ 😕\nможно отправить другую публичную ссылку позже" + errorContact)
+		case errors.Is(err, download.ErrYtDlpNetwork), errors.Is(err, context.DeadlineExceeded):
+			status = "network_error"
+			progress.showError("network_error", "не удалось получить видео из-за сети 😕\nпопробуй позже" + errorContact)
 		case errors.Is(err, download.ErrYtDlpAuth):
 			status = "auth_required"
-			replyText("эта ссылка требует вход в аккаунт и в публичном режиме не скачивается 😕\nпопробуй другую публичную ссылку" + errorContact)
+			progress.showError("auth_required", "эта ссылка требует вход в аккаунт и в публичном режиме не скачивается 😕\nпопробуй другую публичную ссылку" + errorContact)
 		case errors.Is(err, download.ErrVideoTooLong):
 			status = "too_long"
-			replyText("YouTube Shorts должен быть не длиннее 3 минут 😕")
+			progress.showError("too_long", "YouTube Shorts должен быть не длиннее 3 минут 😕")
 		case errors.Is(err, download.ErrYtDlpUnsupported):
 			status = "unsupported"
-			replyText("эта ссылка ведёт не на видео или yt-dlp не умеет её скачивать 😕\nпопробуй другую ссылку" + errorContact)
+			progress.showError("unsupported_url", "эта ссылка ведёт не на видео или yt-dlp не умеет её скачивать 😕\nпопробуй другую ссылку" + errorContact)
 		default:
 			status = "download_error"
-			replyText("не удалось скачать видео 😕\nпопробуй позже" + errorContact)
+			progress.showError("download_error", "не удалось скачать видео 😕\nпопробуй позже" + errorContact)
 		}
 		return
 	}
@@ -221,7 +236,7 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 	info, err := os.Stat(result.FilePath)
 	if err != nil {
 		b.log.Error("failed to stat downloaded file", zap.Error(err))
-		replyText("ошибка чтения файла 😕" + errorContact)
+		progress.showError("internal_error", "ошибка чтения файла 😕" + errorContact)
 		return
 	}
 
@@ -229,7 +244,7 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 
 	if fileSize > b.cfg.MaxDownloadBytes {
 		status = "too_large"
-		replyText(fmt.Sprintf(
+		progress.showError("too_large", fmt.Sprintf(
 			"видео слишком большое (%d МБ), лимит %d МБ 😬",
 			fileSize/(1024*1024), b.cfg.MaxDownloadBytes/(1024*1024),
 		))
@@ -238,7 +253,7 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 
 	if fileSize > telegramMaxFileSize {
 		status = "too_large"
-		replyText(fmt.Sprintf(
+		progress.showError("too_large", fmt.Sprintf(
 			"видео слишком большое для Telegram (%d МБ), лимит 50 МБ 😬",
 			fileSize/(1024*1024),
 		))
@@ -249,7 +264,7 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 	fileData, err := os.ReadFile(result.FilePath)
 	if err != nil {
 		b.log.Error("failed to read downloaded file", zap.Error(err))
-		replyText("ошибка чтения файла 😕" + errorContact)
+		progress.showError("internal_error", "ошибка чтения файла 😕" + errorContact)
 		return
 	}
 
@@ -299,13 +314,13 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 	if sendErr != nil {
 		status = "send_error"
 		b.log.Error("failed to send video to telegram", zap.Error(sendErr))
-		replyText("не удалось отправить видео 😢" + errorContact)
+		progress.showError("send_error", "не удалось отправить видео 😢" + errorContact)
 		return
 	}
 	if resp == nil || resp.Video == nil {
 		status = "send_error"
 		b.log.Error("telegram returned an empty video response")
-		replyText("не удалось отправить видео 😢" + errorContact)
+		progress.showError("send_error", "не удалось отправить видео 😢" + errorContact)
 		return
 	}
 

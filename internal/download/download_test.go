@@ -88,3 +88,26 @@ func hasArgPair(args []string, key, value string) bool {
 	}
 	return false
 }
+
+func TestClassifyYtDlpErrorStage4(t *testing.T) {
+	cases := []struct {
+		name, text string
+		want       error
+	}{
+		{"private instagram", "ERROR: This account is private", ErrYtDlpPrivate},
+		{"private youtube", "ERROR: Private video. Sign in if you have access", ErrYtDlpPrivate},
+		{"tiktok rate limit", "ERROR: HTTP Error 429: Too Many Requests", ErrYtDlpRateLimited},
+		{"youtube network", "ERROR: socket timed out", ErrYtDlpNetwork},
+		{"network reset", "ERROR: connection reset by peer", ErrYtDlpNetwork},
+		{"auth instagram", "ERROR: login required or use cookies", ErrYtDlpAuth},
+		{"unsupported tiktok", "ERROR: Unsupported URL", ErrYtDlpUnsupported},
+		{"unknown generic", "ERROR: unknown failure", ErrYtDlp},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyYtDlpError(tc.text); got != tc.want {
+				t.Fatalf("classify %q: got %v want %v", tc.text, got, tc.want)
+			}
+		})
+	}
+}

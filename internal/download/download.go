@@ -21,6 +21,9 @@ var (
 	ErrYtDlp            = errors.New("yt-dlp error")
 	ErrYtDlpAuth        = errors.New("yt-dlp authentication required")
 	ErrYtDlpUnsupported = errors.New("yt-dlp unsupported url")
+	ErrYtDlpPrivate     = errors.New("yt-dlp private video")
+	ErrYtDlpRateLimited = errors.New("yt-dlp source rate limited")
+	ErrYtDlpNetwork     = errors.New("yt-dlp network failure")
 	ErrVideoTooLong     = errors.New("youtube video exceeds shorts duration limit")
 )
 
@@ -96,6 +99,7 @@ func DownloadVideoWithProgress(ctx context.Context, rawURL, proxy string, platfo
 			zap.String("stdout", stdoutText),
 		)
 		os.RemoveAll(tmpDir)
+		if err := ctx.Err(); err != nil { return nil, err }
 		return nil, fmt.Errorf("%w: %s", downloadErr, stderrText)
 	}
 
@@ -210,10 +214,16 @@ func findFirstFile(dir string) string {
 func classifyYtDlpError(stderr string) error {
 	lower := strings.ToLower(stderr)
 	switch {
+	case strings.Contains(lower, "private video"), strings.Contains(lower, "private account"), strings.Contains(lower, "this account is private"):
+		return ErrYtDlpPrivate
 	case strings.Contains(lower, "login required"), strings.Contains(lower, "cookies"), strings.Contains(lower, "authentication"), strings.Contains(lower, "sign in to confirm"), strings.Contains(lower, "confirm you're not a bot"):
 		return ErrYtDlpAuth
+	case strings.Contains(lower, "http error 429"), strings.Contains(lower, "too many requests"), strings.Contains(lower, "rate limit reached"), strings.Contains(lower, "rate-limit reached"), strings.Contains(lower, "rate limited"):
+		return ErrYtDlpRateLimited
 	case strings.Contains(lower, "unsupported url"):
 		return ErrYtDlpUnsupported
+	case strings.Contains(lower, "timed out"), strings.Contains(lower, "connection reset"), strings.Contains(lower, "connection refused"), strings.Contains(lower, "network is unreachable"), strings.Contains(lower, "temporary failure in name resolution"):
+		return ErrYtDlpNetwork
 	default:
 		return ErrYtDlp
 	}
