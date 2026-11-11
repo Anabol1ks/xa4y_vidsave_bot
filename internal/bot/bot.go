@@ -20,6 +20,9 @@ type Bot struct {
 	sender        *Sender
 	store         *storage.Storage
 	downloadSlots chan struct{}
+	downloadWaitSlots chan struct{}
+	downloadGate *downloadGate
+	downloadWidgetAPI *downloadWidgetAPI
 }
 
 // New создаёт экземпляр бота.
@@ -50,6 +53,9 @@ func New(cfg *config.Config, log *zap.Logger, store *storage.Storage) (*Bot, err
 		sender:        NewSender(api, log),
 		store:         store,
 		downloadSlots: make(chan struct{}, maxConcurrentDownloads),
+		downloadWaitSlots: make(chan struct{}, maxConcurrentDownloads+max(1, cfg.MaxWaitingDownloads)),
+		downloadGate: newDownloadGate(cfg),
+		downloadWidgetAPI: newDownloadWidgetAPI(cfg.BotToken),
 	}
 	bot.installCommandMenu()
 	return bot, nil
@@ -79,6 +85,19 @@ func (b *Bot) Run(ctx context.Context) {
 			go b.handleUpdate(ctx, upd)
 		}
 	}
+}
+
+// downloadWidgetActive gates Stage 3 for controlled owner pilots; no existing
+// user is affected until the feature flag is enabled.
+func (b *Bot) downloadWidgetActive(userID int64) bool {
+	if b==nil || b.cfg==nil || !b.cfg.DownloadWidgetsEnabled {
+		return false
+	}
+	if len(b.cfg.DownloadWidgetPilotIDs)==0 {
+		return true // explicit enable with empty pilot = full rollout
+	}
+	_,ok:=b.cfg.DownloadWidgetPilotIDs[userID]
+	return ok
 }
 
 // handleUpdate обрабатывает одно обновление (сообщение пользователя).

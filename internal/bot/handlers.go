@@ -120,6 +120,18 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 		}
 	}()
 	sourceKey := storage.SourceKeyFromParsed(string(parsed.LinkType), parsed.VideoID)
+	staged:=b.downloadWidgetActive(userID)
+	if staged {
+		release, err := b.downloadGate.begin(userID, chatID, sourceKey, chatKind == "group")
+		if err != nil {
+			status = "busy"
+			if b.downloadGate.shouldNotify(chatID) {
+				b.sender.TextReply(chatID, replyToMessageID, "⏳ Слишком много запросов. Дождись завершения текущего видео или отправь ссылку позже.")
+			}
+			return
+		}
+		defer release()
+	}
 	replyText := func(text string) {
 		b.sender.TextReply(chatID, replyToMessageID, text)
 	}
@@ -152,21 +164,41 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 		b.log.Error("cache lookup error", zap.Error(err))
 	}
 
-	// 2. Кэш-мисс — скачиваем
-	statusMsg := b.sender.TextWithResponseReply(chatID, replyToMessageID, "⏳ сек, качаю")
-
-	// Удаляем статус-сообщение при выходе
-	defer func() {
-		if statusMsg != nil {
-			b.sender.Delete(chatID, statusMsg.MessageID)
+	if staged {
+		releaseQueue,err:=b.reserveDownload()
+		if err!=nil {
+			status="busy"
+			if b.downloadGate.shouldNotify(chatID) {
+				replyText("⏳ Все слоты заняты. Попробуй отправить другую ссылку позже.")
+			}
+			return
 		}
-	}()
-
-	result, err := b.downloadVideoWithLimit(ctx, parsed)
+		defer releaseQueue()
+	}
+	// 2. Кэш-мисс — скачиваем. Status message is optional and never
+	// blocks a download when Telegram widgets are unsupported.
+	progress := b.beginDownloadStatus(ctx, chatKind, chatID, replyToMessageID, parsed.LinkType)
+	defer func() { progress.finish(status == "success") }()
+	progress.stage("downloading")
+	var callback func(download.ProgressEvent)
+	if progress.widget != nil {
+		callback = progress.progress
+	}
+	var result *download.VideoResult
+	if staged {
+		result, err = b.downloadVideoWithProgress(ctx, parsed, callback)
+	} else {
+		result, err = b.downloadVideoWithLimit(ctx, parsed)
+	}
 	if err != nil {
 		b.log.Error("video download failed", zap.Error(err), zap.String("url", parsed.Raw))
 
 		switch {
+		case errors.Is(err, ErrDownloadBusy):
+			status = "busy"
+			if b.downloadGate.shouldNotify(chatID) {
+				replyText("⏳ Сейчас все загрузки заняты. Отправь ссылку чуть позже.")
+			}
 		case errors.Is(err, download.ErrYtDlpAuth):
 			status = "auth_required"
 			replyText("эта ссылка требует вход в аккаунт и в публичном режиме не скачивается 😕\nпопробуй другую публичную ссылку" + errorContact)
@@ -183,6 +215,7 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 		return
 	}
 	defer cleanup(result.FilePath, b.log)
+	progress.stage("preparing")
 
 	// 3. Проверяем размер
 	info, err := os.Stat(result.FilePath)
@@ -235,6 +268,7 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 		video.SupportsStreaming = true
 		video.ReplyMarkup = kb
 		setReply(&video.BaseChat, replyToMessageID)
+		progress.stage("sending")
 		if err := b.sender.Send(video); err == nil {
 			status = "success"
 			cacheKind = "sha256"
@@ -260,6 +294,7 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 	video.ReplyMarkup = kb
 	setReply(&video.BaseChat, replyToMessageID)
 
+	progress.stage("sending")
 	resp, sendErr := b.sender.SendWithResponse(video)
 	if sendErr != nil {
 		status = "send_error"
@@ -296,6 +331,27 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 		zap.String("video_id", parsed.VideoID),
 		zap.Int64("size_bytes", fileSize),
 	)
+}
+
+// downloadVideoWithProgress preserves the legacy exact yt-dlp args when the
+// feature is off. The feature path bounds both queue size and execution time.
+func (b *Bot) downloadVideoWithProgress(ctx context.Context, parsed link.Parsed, callback func(download.ProgressEvent)) (*download.VideoResult, error) {
+	if !b.cfg.DownloadWidgetsEnabled {
+		return b.downloadVideoWithLimit(ctx, parsed)
+	}
+	var result *download.VideoResult
+	err := b.stagedDownload(ctx, func() error {
+		jobCtx, cancel := context.WithTimeout(ctx, b.cfg.DownloadExecutionTimeout)
+		defer cancel()
+		var err error
+		if callback != nil {
+			result, err = download.DownloadVideoWithProgress(jobCtx, parsed.Raw, b.cfg.Proxy, parsed.LinkType, b.log, callback)
+		} else {
+			result, err = download.DownloadVideo(jobCtx, parsed.Raw, b.cfg.Proxy, parsed.LinkType, b.log)
+		}
+		return err
+	})
+	return result, err
 }
 
 func (b *Bot) downloadVideoWithLimit(ctx context.Context, parsed link.Parsed) (*download.VideoResult, error) {

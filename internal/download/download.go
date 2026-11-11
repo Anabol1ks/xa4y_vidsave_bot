@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"xa4yy_vidsave/internal/link"
 
@@ -33,6 +34,12 @@ type VideoResult struct {
 // Возвращает путь к временному файлу (без водяного знака).
 // proxy — строка вида "socks5h://host:port" или "http://host:port" (может быть пустой).
 func DownloadVideo(ctx context.Context, rawURL string, proxy string, platform link.Type, log *zap.Logger) (*VideoResult, error) {
+	return DownloadVideoWithProgress(ctx, rawURL, proxy, platform, log, nil)
+}
+
+// DownloadVideoWithProgress preserves the original video/download workflow,
+// reporting only measured bytes of the current yt-dlp stream.
+func DownloadVideoWithProgress(ctx context.Context, rawURL, proxy string, platform link.Type, log *zap.Logger, onProgress func(ProgressEvent)) (*VideoResult, error) {
 	// Создаём временную директорию для скачивания
 	tmpDir, err := os.MkdirTemp("", "vidsave_*")
 	if err != nil {
@@ -42,29 +49,58 @@ func DownloadVideo(ctx context.Context, rawURL string, proxy string, platform li
 	outTemplate := filepath.Join(tmpDir, "video.%(ext)s")
 
 	args := ytDlpArgs(rawURL, outTemplate, proxy, platform)
+	if onProgress != nil {
+		args = append(args[:len(args)-1], append([]string{
+			"--progress", "--newline", "--no-color", "--progress-template", progressTemplate,
+		}, args[len(args)-1])...)
+	}
 
 	log.Debug("running yt-dlp", zap.Strings("args", args))
 
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		downloadErr := classifyYtDlpError(stderr.String())
+	var stdoutCapture, stderrCapture *progressWriter
+	if onProgress != nil {
+		// --print after_move:filepath implies --quiet; yt-dlp can send its
+		// --progress-template to stdout, not stderr. Parse BOTH streams,
+		// while retaining the non-progress stdout line containing filepath.
+		// os/exec copies stdout and stderr in separate goroutines; callbacks
+		// must be serialized, even if both streams emit progress.
+		var progressMu sync.Mutex
+		callback := func(event ProgressEvent) {
+			progressMu.Lock()
+			defer progressMu.Unlock()
+			onProgress(event)
+		}
+		stdoutCapture = &progressWriter{callback: callback}
+		stderrCapture = &progressWriter{callback: callback}
+		cmd.Stdout = stdoutCapture
+		cmd.Stderr = stderrCapture
+	} else {
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+	}
+	cmdErr := cmd.Run()
+	stdoutText, stderrText := stdout.String(), stderr.String()
+	if stdoutCapture != nil {
+		stdoutText = stdoutCapture.diagnostic()
+		stderrText = stderrCapture.diagnostic()
+	}
+	if cmdErr != nil {
+		downloadErr := classifyYtDlpError(stderrText)
 		log.Error("yt-dlp failed",
-			zap.Error(err),
+			zap.Error(cmdErr),
 			zap.String("classified_error", downloadErr.Error()),
-			zap.String("stderr", stderr.String()),
-			zap.String("stdout", stdout.String()),
+			zap.String("stderr", stderrText),
+			zap.String("stdout", stdoutText),
 		)
 		os.RemoveAll(tmpDir)
-		return nil, fmt.Errorf("%w: %s", downloadErr, stderr.String())
+		return nil, fmt.Errorf("%w: %s", downloadErr, stderrText)
 	}
 
 	// --print after_move:filepath выводит путь к итоговому файлу в stdout
-	filePath := strings.TrimSpace(stdout.String())
+	filePath := finalFilePath(stdoutText, tmpDir)
 	log.Debug("yt-dlp output path", zap.String("raw_stdout", filePath))
 
 	// Если путь пустой или файла нет — ищем любой файл в tmp-директории
@@ -74,7 +110,7 @@ func DownloadVideo(ctx context.Context, rawURL string, proxy string, platform li
 	}
 
 	if filePath == "" {
-		if strings.Contains(strings.ToLower(stdout.String()+" "+stderr.String()), "does not pass filter") && platform == link.TypeYouTube {
+		if strings.Contains(strings.ToLower(stdoutText+" "+stderrText), "does not pass filter") && platform == link.TypeYouTube {
 			os.RemoveAll(tmpDir)
 			return nil, ErrVideoTooLong
 		}
@@ -121,6 +157,36 @@ func ytDlpArgs(rawURL, outTemplate, proxy string, platform link.Type) []string {
 		args = append(args, "--proxy", proxy)
 	}
 	return append(args, rawURL)
+}
+
+// finalFilePath selects the last existing yt-dlp after_move filepath line.
+
+// In progress mode stdout also includes our progress-template events, so
+// treating all of stdout as a single path would fail or select an interim file.
+func finalFilePath(stdout, tmpDir string) string {
+	lines := strings.Split(stdout, "\n")
+	base, err := filepath.EvalSymlinks(tmpDir)
+	if err != nil {
+		return ""
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		candidate := strings.TrimSpace(lines[i])
+		if candidate == "" || !filepath.IsAbs(candidate) {
+			continue
+		}
+		path, err := filepath.EvalSymlinks(candidate)
+		if err != nil {
+			continue
+		}
+		rel, err := filepath.Rel(base, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if fileExists(path) {
+			return path
+		}
+	}
+	return ""
 }
 
 func fileExists(path string) bool {
