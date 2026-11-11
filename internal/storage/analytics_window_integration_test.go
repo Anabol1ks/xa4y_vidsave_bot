@@ -51,23 +51,35 @@ func TestAnalyticsWindowPostgres(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := tx.Create(&MediaCache{
-		SourceKey: "youtube:abc", SHA256: "abc", TgFileID: "file-id", TgFileUniqueID: "unique-id", SizeBytes: 1200,
-		CreatedAt: now.Add(-90 * 24 * time.Hour), LastUsedAt: now.Add(-30 * time.Hour),
-	}).Error; err != nil {
-		t.Fatal(err)
+	for _, video := range []struct {
+		key string
+		ago time.Duration
+	}{
+		{"youtube:ancient", -90 * 24 * time.Hour},
+		{"instagram:month", -20 * 24 * time.Hour},
+		{"tiktok:week", -2 * 24 * time.Hour},
+		{"youtube:today", -5 * time.Minute},
+	} {
+		if err := tx.Create(&MediaCache{
+			SourceKey: video.key, SHA256: video.key, TgFileID: video.key,
+			TgFileUniqueID: video.key, SizeBytes: 1200,
+			CreatedAt: now.Add(video.ago), LastUsedAt: now,
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	cases := []struct {
 		period                                            AnalyticsPeriod
 		users, newUsers, requests, success, errors, cache int64
 		buckets                                           int
+		videos                                            int64
 		rate                                              float64
 	}{
-		{Period24h, 2, 1, 1, 1, 0, 1, 12, 100},
-		{Period7d, 3, 2, 2, 1, 1, 1, 7, 50},
-		{Period30d, 3, 2, 3, 2, 1, 2, 10, 66.7},
-		{PeriodAll, 3, 3, 4, 3, 1, 2, 12, 75},
+		{Period24h, 2, 1, 1, 1, 0, 1, 12, 1, 100},
+		{Period7d, 3, 2, 2, 1, 1, 1, 7, 2, 50},
+		{Period30d, 3, 2, 3, 2, 1, 2, 10, 3, 66.7},
+		{PeriodAll, 3, 3, 4, 3, 1, 2, 12, 4, 75},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.period), func(t *testing.T) {
@@ -92,7 +104,24 @@ func TestAnalyticsWindowPostgres(t *testing.T) {
 			if len(snap.Platforms) != 3 {
 				t.Fatalf("missing platforms: %+v", snap.Platforms)
 			}
-			if tc.period == PeriodAll && snap.Historical != 1 {
+			if snap.Videos != tc.videos || len(snap.VideoBuckets) != tc.buckets || len(snap.VideoPlatforms) != 3 {
+				t.Fatalf("invalid historical video metrics period=%s %+v", tc.period, snap)
+			}
+			var videoSum int64
+			for _, count := range snap.VideoBuckets {
+				videoSum += count
+			}
+			if videoSum != tc.videos {
+				t.Fatalf("video timeline sum %d != video count %d", videoSum, tc.videos)
+			}
+			var platformSum int64
+			for _, p := range snap.VideoPlatforms {
+				platformSum += p.Count
+			}
+			if platformSum != tc.videos {
+				t.Fatalf("video platform sum %d != count %d", platformSum, tc.videos)
+			}
+			if tc.period == PeriodAll && snap.Historical != 4 {
 				t.Fatalf("historic cache must be separate: %+v", snap)
 			}
 			if tc.period != PeriodAll && snap.Historical != 0 {
@@ -128,7 +157,7 @@ func TestAnalyticsWindowZeroRequests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snap.SuccessRate != nil || snap.Requests != 0 || snap.Users != 0 || snap.Historical != 0 {
+	if snap.SuccessRate != nil || snap.Requests != 0 || snap.Users != 0 || snap.Historical != 0 || snap.Videos != 0 {
 		t.Fatalf("no traffic should not display a misleading 0%%: %+v", snap)
 	}
 }
