@@ -95,6 +95,8 @@ func TestClassifyYtDlpErrorStage4(t *testing.T) {
 		want       error
 	}{
 		{"private instagram", "ERROR: This account is private", ErrYtDlpPrivate},
+		{"audience restricted actual reel", "ERROR: [Instagram] DfrHoCYsT_E: This content isn't available to everyone: It can't be seen by certain audiences.", ErrYtDlpRestricted},
+		{"audience restricted alt phrase", "ERROR: [Instagram] DfrHoCYsT_E: It can't be seen by certain audiences.", ErrYtDlpRestricted},
 		{"private youtube", "ERROR: Private video. Sign in if you have access", ErrYtDlpPrivate},
 		{"tiktok rate limit", "ERROR: HTTP Error 429: Too Many Requests", ErrYtDlpRateLimited},
 		{"youtube network", "ERROR: socket timed out", ErrYtDlpNetwork},
