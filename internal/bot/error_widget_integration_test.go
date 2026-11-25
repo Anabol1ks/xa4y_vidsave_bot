@@ -62,6 +62,7 @@ for x in "$@"; do last="$x"; done
 case "$last" in
  *DfrHoCYsT_E*) echo "ERROR: [Instagram] DfrHoCYsT_E: This content isn't available to everyone: It can't be seen by certain audiences." >&2 ;;
  *instagram*) echo "ERROR: This account is private" >&2 ;;
+ *ZSs6HJd2f*) echo "ERROR: [TikTok] 7668373384857668896: This post may not be comfortable for some audiences. Log in for access. Use --cookies for the authentication." >&2 ;;
  *tiktok*) echo "ERROR: HTTP Error 429: Too Many Requests" >&2 ;;
  *youtube*) echo "ERROR: socket timed out" >&2 ;;
  *) echo "ERROR: unexpected URL" >&2 ;;
@@ -100,6 +101,7 @@ exit 1
 		{link.TypeTikTok, "https://www.tiktok.com/@user/video/12", "source_rate_limited"},
 		{link.TypeYouTube, "https://www.youtube.com/shorts/abc", "network_error"},
 		{link.TypeInstagram, "https://www.instagram.com/reel/DfrHoCYsT_E/?xtok=NzB0YTluNmFpMGs4", "source_restricted"},
+		{link.TypeTikTok, "https://vt.tiktok.com/ZSs6HJd2f", "source_restricted"},
 	}
 	baseID := time.Now().UnixNano()
 	for i, tc := range testCases {
@@ -110,8 +112,8 @@ exit 1
 	}
 	// Two widgets per failed download: transient progress + durable error card.
 	sends := fake.callsFor("sendWidget")
-	if len(sends) != 8 {
-		t.Fatalf("expected 8 sends, got %d", len(sends))
+	if len(sends) != 10 {
+		t.Fatalf("expected 10 sends, got %d", len(sends))
 	}
 	for i, tc := range testCases {
 		var progress map[string]interface{}
@@ -137,7 +139,7 @@ exit 1
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Requests != 4 || report.Success != 0 || report.Failed != 4 {
+	if report.Requests != 5 || report.Success != 0 || report.Failed != 5 {
 		t.Fatalf("events must not double-count widget notifications: %+v", report)
 	}
 }

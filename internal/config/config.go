@@ -24,6 +24,7 @@ type Config struct {
 	ErrorWidgetsEnabled bool
 	DownloadWidgetPilotIDs map[int64]struct{}
 	TikTokPhotosEnabled bool
+	TikTokVideoFallbackEnabled bool
 	TikTokPhotoPilotIDs map[int64]struct{}
 	MaxWaitingDownloads int
 	DownloadQueueTimeout time.Duration
@@ -86,6 +87,7 @@ func Load(log *zap.Logger) *Config {
 		ErrorWidgetsEnabled: parseBool(os.Getenv("ERROR_WIDGET_ENABLED")),
 		DownloadWidgetPilotIDs: pilotIDs,
 		TikTokPhotosEnabled: parseBool(os.Getenv("TIKTOK_PHOTO_ENABLED")),
+		TikTokVideoFallbackEnabled: parseBool(os.Getenv("TIKTOK_VIDEO_FALLBACK_ENABLED")),
 		TikTokPhotoPilotIDs: photoPilotIDs,
 		MaxWaitingDownloads: max(1, parseInt(os.Getenv("MAX_WAITING_DOWNLOADS"), 6)),
 		DownloadQueueTimeout: time.Duration(max(5, parseInt(os.Getenv("DOWNLOAD_QUEUE_TIMEOUT_SEC"), 20))) * time.Second,

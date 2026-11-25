@@ -19,6 +19,7 @@ import (
 var (
 	ErrVideoNotFound    = errors.New("video not found")
 	ErrYtDlp            = errors.New("yt-dlp error")
+	ErrYtDlpExtraction  = errors.New("yt-dlp webpage extraction failure")
 	ErrYtDlpAuth        = errors.New("yt-dlp authentication required")
 	ErrYtDlpUnsupported = errors.New("yt-dlp unsupported url")
 	ErrYtDlpPrivate     = errors.New("yt-dlp private video")
@@ -217,11 +218,11 @@ func classifyYtDlpError(stderr string) error {
 	switch {
 	case strings.Contains(lower, "private video"), strings.Contains(lower, "private account"), strings.Contains(lower, "this account is private"):
 		return ErrYtDlpPrivate
-	case strings.Contains(lower, "this content isn't available to everyone"), strings.Contains(lower, "can't be seen by certain audiences"):
-		// Instagram limits viewing by audience. Not a temporary network error
-		// and not proof of missing login credentials.
+	case strings.Contains(lower, "this content isn't available to everyone"), strings.Contains(lower, "can't be seen by certain audiences"), strings.Contains(lower, "this post may not be comfortable for some audiences"), strings.Contains(lower, "your ip address is blocked from accessing this post"), strings.Contains(lower, "region locked"), strings.Contains(lower, "age-restricted"), strings.Contains(lower, "not available in your country"):
+		// Instagram and TikTok may restrict viewing by audience.
+		// Classify this before generic authentication or cookie hints.
 		return ErrYtDlpRestricted
-	case strings.Contains(lower, "login required"), strings.Contains(lower, "cookies"), strings.Contains(lower, "authentication"), strings.Contains(lower, "sign in to confirm"), strings.Contains(lower, "confirm you're not a bot"):
+	case strings.Contains(lower, "login required"), strings.Contains(lower, "log in for access"), strings.Contains(lower, "sign in to view"), strings.Contains(lower, "cookies"), strings.Contains(lower, "authentication"), strings.Contains(lower, "sign in to confirm"), strings.Contains(lower, "confirm you're not a bot"):
 		return ErrYtDlpAuth
 	case strings.Contains(lower, "http error 429"), strings.Contains(lower, "too many requests"), strings.Contains(lower, "rate limit reached"), strings.Contains(lower, "rate-limit reached"), strings.Contains(lower, "rate limited"):
 		return ErrYtDlpRateLimited
@@ -229,6 +230,12 @@ func classifyYtDlpError(stderr string) error {
 		return ErrYtDlpUnsupported
 	case strings.Contains(lower, "timed out"), strings.Contains(lower, "connection reset"), strings.Contains(lower, "connection refused"), strings.Contains(lower, "network is unreachable"), strings.Contains(lower, "temporary failure in name resolution"):
 		return ErrYtDlpNetwork
+	case strings.Contains(lower, "access denied"), strings.Contains(lower, "http error 403"):
+		// A generic denial is not evidence of a particular audience restriction.
+		return ErrYtDlp
+	case strings.Contains(lower, "unexpected response from webpage request"), strings.Contains(lower, "unable to extract webpage data"), strings.Contains(lower, "failed to extract webpage data"):
+		// Only explicit extraction failures are eligible for another extractor.
+		return ErrYtDlpExtraction
 	default:
 		return ErrYtDlp
 	}
