@@ -362,11 +362,7 @@ func (b *Bot) downloadVideoWithProgress(ctx context.Context, parsed link.Parsed,
 		jobCtx, cancel := context.WithTimeout(ctx, b.cfg.DownloadExecutionTimeout)
 		defer cancel()
 		var err error
-		if callback != nil {
-			result, err = download.DownloadVideoWithProgress(jobCtx, parsed.Raw, b.cfg.Proxy, parsed.LinkType, b.log, callback)
-		} else {
-			result, err = download.DownloadVideo(jobCtx, parsed.Raw, b.cfg.Proxy, parsed.LinkType, b.log)
-		}
+		result, err = b.extractVideo(jobCtx, parsed, callback)
 		return err
 	})
 	return result, err
@@ -380,7 +376,20 @@ func (b *Bot) downloadVideoWithLimit(ctx context.Context, parsed link.Parsed) (*
 		return nil, ctx.Err()
 	}
 
+	if b.cfg.TikTokVideoFallbackEnabled && parsed.LinkType == link.TypeTikTok {
+		jobCtx, cancel := context.WithTimeout(ctx, b.cfg.DownloadExecutionTimeout)
+		defer cancel()
+		return b.extractVideo(jobCtx, parsed, nil)
+	}
 	return download.DownloadVideo(ctx, parsed.Raw, b.cfg.Proxy, parsed.LinkType, b.log)
+}
+
+// Both extractors share the same slot, execution deadline and request event.
+func (b *Bot) extractVideo(ctx context.Context, parsed link.Parsed, callback func(download.ProgressEvent)) (*download.VideoResult, error) {
+	if b.cfg.TikTokVideoFallbackEnabled && parsed.LinkType == link.TypeTikTok && !parsed.IsPhoto {
+		return download.DownloadTikTokVideoWithFallback(ctx, parsed.Raw, b.cfg.Proxy, b.cfg.MaxDownloadBytes, b.log, callback)
+	}
+	return download.DownloadVideoWithProgress(ctx, parsed.Raw, b.cfg.Proxy, parsed.LinkType, b.log, callback)
 }
 
 // --- Inline ---

@@ -158,7 +158,7 @@ func (w *downloadWidgetSession) run() {
 				continue
 			}
 			changedStage := lastSent.Stage != pending.Stage
-			percentageMoved := pending.Percent != nil && (lastSent.Percent == nil || *pending.Percent >= *lastSent.Percent+5 || *pending.Percent < *lastSent.Percent)
+			percentageMoved := (pending.Percent == nil && lastSent.Percent != nil) || (pending.Percent != nil && (lastSent.Percent == nil || *pending.Percent >= *lastSent.Percent+5 || *pending.Percent < *lastSent.Percent))
 			if !changedStage && !percentageMoved {
 				continue
 			}

@@ -62,6 +62,15 @@ func (s *fakeVideoSender) count() (int, int) {
 // PostgreSQL, fake yt-dlp executable and local mock Telegram API; no production
 // tokens, accounts, external networks or real videos are involved.
 func TestDownloadWidgetEndToEndPostgres(t *testing.T) {
+	testDownloadWidgetPipeline(t, false)
+}
+
+func TestTikTokVideoFallbackEndToEndPostgres(t *testing.T) {
+	testDownloadWidgetPipeline(t, true)
+}
+
+func testDownloadWidgetPipeline(t *testing.T, fallback bool) {
+	t.Helper()
 	dsn := os.Getenv("VIDSAVE_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("requires disposable PostgreSQL database")
@@ -108,6 +117,23 @@ printf 'VIDSAVE_PROGRESS|downloading|5|10|NA\n' >&2
 printf 'VIDSAVE_PROGRESS|downloading|10|10|NA\n' >&2
 printf '%s\n' "$file"
 `
+	if fallback {
+		script = "#!/bin/sh\necho 'ERROR: Unexpected response from webpage request' >&2; exit 1\n"
+		gallery := `#!/bin/sh
+echo called >> "` + filepath.Join(dir, "gallery-called") + `"
+while [ "$#" -gt 0 ]; do
+ if [ "$1" = "--directory" ]; then shift; out="$1"; fi
+ shift
+done
+printf '\000\000\000\040ftypisom' > "$out/video.mp4"
+`
+		if err := os.WriteFile(filepath.Join(dir, "gallery-dl"), []byte(gallery), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "ffprobe"), []byte("#!/bin/sh\nprintf 'video\\n'\n"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -118,14 +144,15 @@ printf '%s\n' "$file"
 	defer server.Close()
 	sender := &fakeVideoSender{}
 	cfg := &config.Config{
-		DownloadWidgetsEnabled:   true,
-		MaxWaitingDownloads:      2,
-		DownloadQueueTimeout:     time.Second,
-		DownloadExecutionTimeout: 5 * time.Second,
-		DownloadUserCooldown:     time.Second,
-		DownloadSourceCooldown:   30 * time.Second,
-		DownloadGroupPerMinute:   10,
-		MaxDownloadBytes:         50 * 1024 * 1024,
+		DownloadWidgetsEnabled:     true,
+		TikTokVideoFallbackEnabled: fallback,
+		MaxWaitingDownloads:        2,
+		DownloadQueueTimeout:       time.Second,
+		DownloadExecutionTimeout:   5 * time.Second,
+		DownloadUserCooldown:       time.Second,
+		DownloadSourceCooldown:     30 * time.Second,
+		DownloadGroupPerMinute:     10,
+		MaxDownloadBytes:           50 * 1024 * 1024,
 	}
 	api := &downloadWidgetAPI{endpoint: server.URL, client: server.Client()}
 	b := &Bot{
@@ -149,6 +176,16 @@ printf '%s\n' "$file"
 	}
 	if len(mock.callsFor("sendWidget")) != 1 {
 		t.Fatal("expected live widget")
+	}
+	if fallback {
+		calls, err := os.ReadFile(filepath.Join(dir, "gallery-called"))
+		if err != nil || string(calls) != "called\n" {
+			t.Fatalf("fallback did not run exactly once: %q %v", calls, err)
+		}
+		report, err := store.Analytics(context.Background())
+		if err != nil || report.Requests != 1 || report.Success != 1 || report.Failed != 0 {
+			t.Fatalf("fallback must be one successful request: %+v %v", report, err)
+		}
 	}
 	// Internal cache entry is present after the successful real sending pipeline.
 	key := storage.SourceKeyFromParsed("tiktok", parsed.VideoID)
