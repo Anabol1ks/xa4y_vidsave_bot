@@ -210,7 +210,7 @@ func (b *Bot) handleDownload(ctx context.Context, userID int64, chatKind string,
 			progress.showError("private_video", "это видео закрыто настройками приватности 😕\nпопробуй другую публичную ссылку" + errorContact)
 		case errors.Is(err, download.ErrYtDlpRestricted):
 			status = "source_restricted"
-			progress.showError("source_restricted", "Instagram ограничил просмотр этого ролика для некоторых пользователей 😕\nПопробуй другой публичный Reels.")
+			progress.showError("source_restricted", "Просмотр этого ролика ограничен для некоторых пользователей 😕\nВ публичном режиме скачать его не удалось. Пришли другую доступную ссылку.")
 		case errors.Is(err, download.ErrYtDlpRateLimited):
 			status = "source_rate_limited"
 			progress.showError("source_rate_limited", "платформа временно ограничила доступ 😕\nможно отправить другую публичную ссылку позже" + errorContact)

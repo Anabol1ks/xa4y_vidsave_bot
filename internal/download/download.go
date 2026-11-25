@@ -217,9 +217,9 @@ func classifyYtDlpError(stderr string) error {
 	switch {
 	case strings.Contains(lower, "private video"), strings.Contains(lower, "private account"), strings.Contains(lower, "this account is private"):
 		return ErrYtDlpPrivate
-	case strings.Contains(lower, "this content isn't available to everyone"), strings.Contains(lower, "can't be seen by certain audiences"):
-		// Instagram limits viewing by audience. Not a temporary network error
-		// and not proof of missing login credentials.
+	case strings.Contains(lower, "this content isn't available to everyone"), strings.Contains(lower, "can't be seen by certain audiences"), strings.Contains(lower, "this post may not be comfortable for some audiences"):
+		// Instagram and TikTok may restrict viewing by audience.
+		// Classify this before generic authentication or cookie hints.
 		return ErrYtDlpRestricted
 	case strings.Contains(lower, "login required"), strings.Contains(lower, "cookies"), strings.Contains(lower, "authentication"), strings.Contains(lower, "sign in to confirm"), strings.Contains(lower, "confirm you're not a bot"):
 		return ErrYtDlpAuth
